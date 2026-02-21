@@ -317,15 +317,25 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
+                            // 1. ARMADO DE PROTECCIÓN (Log de aviso)
+                            if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.00) {
+                                botState.lastSlAssigned = 2.00;
+                                console.log(`🛡️ ASEGURADOR ARMADO: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo ganancia de $2.00...`);
+                            } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.00) {
+                                botState.lastSlAssigned = 1.00;
+                                console.log(`🛡️ ASEGURADOR ARMADO: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo ganancia de $1.00...`);
+                            }
+
+                            // 2. EJECUCIÓN DE VENTA (Si el profit cae del nivel protegido)
                             let thresholdToSell = null;
-                            if (botState.currentMaxProfit >= 3.00 && currentProfit <= 2.00) {
-                                thresholdToSell = 2.00; // Si bajó de 3 a 2, vende
-                            } else if (botState.currentMaxProfit >= 2.00 && currentProfit <= 1.00 && botState.currentMaxProfit < 3.00) {
-                                thresholdToSell = 1.00; // Si bajó de 2 a 1, vende
+                            if (botState.lastSlAssigned === 2.00 && currentProfit <= 2.00) {
+                                thresholdToSell = 2.00;
+                            } else if (botState.lastSlAssigned === 1.00 && currentProfit <= 1.00) {
+                                thresholdToSell = 1.00;
                             }
 
                             if (thresholdToSell !== null) {
-                                console.log(`🛡️ ASEGURADOR ACTIVADO: Profit bajó a ${currentProfit.toFixed(2)} (Pico: ${botState.currentMaxProfit.toFixed(2)}). Asegurando $${thresholdToSell.toFixed(2)}...`);
+                                console.log(`⚠️ ASEGURADOR DISPARADO: Profit cayó a $${currentProfit.toFixed(2)}. Cerrando para asegurar $${thresholdToSell.toFixed(2)}...`);
                                 sellContract(contract.contract_id);
                             }
                         }
