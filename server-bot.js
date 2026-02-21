@@ -140,6 +140,7 @@ app.post('/api/control', (req, res) => {
     if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER')) {
         if (botState.isRunning && botState.activeStrategy !== strategy) {
             console.log(`⚠️ INTENTO DE CAMBIO BLOQUEADO: No se puede cambiar a ${strategy} mientras ${botState.activeStrategy} está en ejecución.`);
+            return res.status(400).json({ success: false, error: `El bot ya está corriendo en modo ${botState.activeStrategy}. Deténlo para cambiar.` });
         } else {
             botState.activeStrategy = strategy;
             saveState();
