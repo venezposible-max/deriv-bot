@@ -31,7 +31,9 @@ let botState = {
     lossesSession: 0,
     pnlSession: 0,
     currentContractId: null,
-    lastTradeTime: null
+    activeProfit: 0,
+    lastTradeTime: null,
+    tradeHistory: []
 };
 
 let ws;
@@ -90,6 +92,25 @@ app.post('/api/control', (req, res) => {
     }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });
+});
+
+// Endpoint 3: Disparo Manual (El Frontend ya no se conectará por WebSocket, le pedirá al backend que dispare)
+app.post('/api/trade', (req, res) => {
+    const { action, password } = req.body; // action: MULTUP o MULTDOWN
+
+    if (password !== WEB_PASSWORD) {
+        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    }
+
+    if (botState.currentContractId || isBuying) {
+        return res.status(400).json({ success: false, error: 'Ya hay una operación en curso.' });
+    }
+
+    if (action === 'MULTUP' || action === 'MULTDOWN') {
+        executeTrade(action);
+        return res.json({ success: true, message: `Disparo ${action} enviado` });
+    }
+    res.status(400).json({ success: false, error: 'Acción de trade inválida' });
 });
 
 // Arrancar servidor Express (Railway usará el puerto dinámico Process.env.PORT)
@@ -164,10 +185,15 @@ function connectDeriv() {
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: botState.currentContractId, subscribe: 1 }));
         }
 
-        // Catch: Rastreo del Contrato Activo (Saber cuándo cerró por TP/SL)
+        // Catch: Rastreo del Contrato Activo (Saber cuándo cerró por TP/SL y calcular Profit en vivo)
         if (msg.msg_type === 'proposal_open_contract') {
             const contract = msg.proposal_open_contract;
-            if (contract.is_sold) {
+
+            if (contract && !contract.is_sold) {
+                botState.activeProfit = parseFloat(contract.profit || 0);
+            }
+
+            if (contract && contract.is_sold) {
                 const profit = parseFloat(contract.profit);
                 const isWin = profit > 0;
 
@@ -180,7 +206,17 @@ function connectDeriv() {
 
                 // Limpieza post-trade
                 botState.currentContractId = null;
+                botState.activeProfit = 0;
                 isBuying = false;
+
+                // Añadir al historial
+                botState.tradeHistory.unshift({
+                    id: contract.contract_id,
+                    type: contract.contract_type,
+                    profit: profit,
+                    timestamp: new Date().toLocaleTimeString()
+                });
+                if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
 
                 // Cooldown: 15 segs
                 cooldownTime = 15;
