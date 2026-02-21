@@ -138,9 +138,13 @@ app.post('/api/control', (req, res) => {
     }
 
     if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER')) {
-        botState.activeStrategy = strategy;
-        saveState();
-        console.log(`🔄 CAMBIO DE ESTRATEGIA: Ahora en modo ${strategy}`);
+        if (botState.isRunning && botState.activeStrategy !== strategy) {
+            console.log(`⚠️ INTENTO DE CAMBIO BLOQUEADO: No se puede cambiar a ${strategy} mientras ${botState.activeStrategy} está en ejecución.`);
+        } else {
+            botState.activeStrategy = strategy;
+            saveState();
+            console.log(`🔄 ESTRATEGIA SELECCIONADA: ${strategy}`);
+        }
     }
 
     if (action === 'START') {
