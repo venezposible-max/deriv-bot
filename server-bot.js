@@ -213,7 +213,7 @@ function executeTrade(type) {
             amount: safeAmt, basis: "stake", contract_type: type, currency: "USD",
             multiplier: MULTIPLIER, symbol: SYMBOL,
             limit_order: {
-                take_profit: parseFloat(Math.max(0.02, safeAmt * TP_PERCENT).toFixed(2))
+                take_profit: parseFloat(Math.max(0.10, safeAmt * TP_PERCENT).toFixed(2))
             }
         }
     }));
