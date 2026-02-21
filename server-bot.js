@@ -317,24 +317,16 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
-                            let newSL = null;
-                            if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.00) {
-                                newSL = 2.00; // Asegura $2
-                            } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.00) {
-                                newSL = 1.00; // Asegura $1
+                            let thresholdToSell = null;
+                            if (botState.currentMaxProfit >= 3.00 && currentProfit <= 2.00) {
+                                thresholdToSell = 2.00; // Si bajó de 3 a 2, vende
+                            } else if (botState.currentMaxProfit >= 2.00 && currentProfit <= 1.00 && botState.currentMaxProfit < 3.00) {
+                                thresholdToSell = 1.00; // Si bajó de 2 a 1, vende
                             }
 
-                            if (newSL !== null) {
-                                botState.lastSlAssigned = newSL;
-                                console.log(`🛡️ ASEGURADOR: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Asegurando $${newSL.toFixed(2)}...`);
-                                ws.send(JSON.stringify({
-                                    contract_update: 1,
-                                    contract_id: contract.contract_id,
-                                    limit_order: {
-                                        stop_loss: newSL,
-                                        take_profit: SNIPER_CONFIG.takeProfit
-                                    }
-                                }));
+                            if (thresholdToSell !== null) {
+                                console.log(`🛡️ ASEGURADOR ACTIVADO: Profit bajó a ${currentProfit.toFixed(2)} (Pico: ${botState.currentMaxProfit.toFixed(2)}). Asegurando $${thresholdToSell.toFixed(2)}...`);
+                                sellContract(contract.contract_id);
                             }
                         }
                     }
@@ -374,6 +366,17 @@ function connectDeriv() {
         isBuying = false;
         setTimeout(connectDeriv, 5000);
     });
+}
+
+function sellContract(contractId) {
+    if (isBuying) return; // Reutilizamos bloqueo
+    isBuying = true;
+    console.log(`💰 [ASEGURADOR] Vendiendo contrato ${contractId} para asegurar ganancias...`);
+    ws.send(JSON.stringify({
+        sell: contractId,
+        price: 0 // 0 significa vender al precio de mercado actual
+    }));
+    setTimeout(() => { if (isBuying) isBuying = false; }, 3000);
 }
 
 function executeTrade(type) {
