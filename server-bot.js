@@ -47,8 +47,12 @@ console.log('🚀 Iniciando Servidor 24/7 (Express + WS)...');
 // SERVIDOR WEB (CONTROL REMOTO PARA VERCEL)
 // ==========================================
 const app = express();
+const path = require('path');
 app.use(cors());
 app.use(express.json());
+
+// Servir archivos estáticos de la web
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Endpoint 1: Ver estado del Bot (La web de Vercel llamará a esto para actualizar la UI)
 app.get('/api/status', (req, res) => {
