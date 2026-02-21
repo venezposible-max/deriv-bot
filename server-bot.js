@@ -131,6 +131,7 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/control', (req, res) => {
     const { action, password, stake, takeProfit, multiplier, strategy } = req.body;
+    console.log(`📩 RECIBIDO EN SERVIDOR: Acción=${action} | Estrategia=${strategy} | Stake=${stake}`);
 
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
