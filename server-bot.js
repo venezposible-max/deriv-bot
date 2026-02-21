@@ -9,7 +9,7 @@ const APP_ID = 1089;
 const SYMBOL = 'R_100';
 const MULTIPLIER = 40;
 const STAKE_AMOUNT = 3;
-const TP_PERCENT = 0.03; // Take Profit: 3% del stake (~$0.30 para $10)
+const TP_AMOUNT = 0.30; // Take Profit fijo en $0.30
 // Sin Stop Loss - Liquidación total del stake
 const MOMENTUM_TICKS = 5;
 
@@ -213,7 +213,7 @@ function executeTrade(type) {
             amount: safeAmt, basis: "stake", contract_type: type, currency: "USD",
             multiplier: MULTIPLIER, symbol: SYMBOL,
             limit_order: {
-                take_profit: parseFloat(Math.max(0.10, safeAmt * TP_PERCENT).toFixed(2))
+                take_profit: TP_AMOUNT
             }
         }
     }));
