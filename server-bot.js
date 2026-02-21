@@ -7,9 +7,9 @@ const cors = require('cors');
 // ==========================================
 const APP_ID = 1089;
 const SYMBOL = 'R_100';
-const MULTIPLIER = 40;
-const STAKE_AMOUNT = 3;
-const TP_AMOUNT = 0.30; // Take Profit fijo en $0.30
+let MULTIPLIER = 40;
+let STAKE_AMOUNT = 3;
+let TP_AMOUNT = 0.30; // Take Profit fijo en $0.30
 // Sin Stop Loss - Liquidación total del stake
 const MOMENTUM_TICKS = 5;
 
@@ -52,13 +52,18 @@ app.use(express.json());
 app.get('/api/status', (req, res) => {
     res.json({
         success: true,
-        data: botState
+        data: botState,
+        config: {
+            stake: STAKE_AMOUNT,
+            takeProfit: TP_AMOUNT,
+            multiplier: MULTIPLIER
+        }
     });
 });
 
 // Endpoint 2: Control Remoto (Pausar / Reanudar)
 app.post('/api/control', (req, res) => {
-    const { action, password } = req.body;
+    const { action, password, stake, takeProfit, multiplier } = req.body;
 
     // Medida de seguridad básica (La misma clave debe estar configurada en la App Web)
     if (password !== WEB_PASSWORD) {
@@ -67,8 +72,14 @@ app.post('/api/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
-        console.log('▶️ COMANDO REMOTO: Bot Reanudado.');
-        return res.json({ success: true, message: 'Bot Activado', isRunning: true });
+
+        // Actualizar parámetros si se envían
+        if (stake) STAKE_AMOUNT = Number(stake);
+        if (takeProfit) TP_AMOUNT = Number(takeProfit);
+        if (multiplier) MULTIPLIER = Number(multiplier);
+
+        console.log(`▶️ COMANDO REMOTO: Bot Reanudado. Stake: $${STAKE_AMOUNT} | TP: $${TP_AMOUNT} | Mult: x${MULTIPLIER}`);
+        return res.json({ success: true, message: 'Bot Activado', isRunning: true, config: { stake: STAKE_AMOUNT, takeProfit: TP_AMOUNT, multiplier: MULTIPLIER } });
     }
 
     if (action === 'STOP') {
