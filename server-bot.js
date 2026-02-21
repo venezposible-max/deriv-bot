@@ -181,6 +181,19 @@ function connectDeriv() {
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
             // Suscribirse a actualizaciones de saldo
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+            // RECOPERACIÓN: Buscar si hay contratos abiertos (por si el server se reinició)
+            ws.send(JSON.stringify({ portfolio: 1 }));
+        }
+
+        // Catch: Listado de Portfolio (para recuperar trades activos)
+        if (msg.msg_type === 'portfolio') {
+            const contracts = msg.portfolio.contracts;
+            const active = contracts.find(c => c.symbol === SYMBOL && !c.expiry_time);
+            if (active && !botState.currentContractId) {
+                botState.currentContractId = active.contract_id;
+                console.log(`♻️ RECOPERACIÓN: Detectada operacion activa ID ${active.contract_id}. Re-vinculando...`);
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: botState.currentContractId, subscribe: 1 }));
+            }
         }
 
         // Catch: Actualización de Saldo
