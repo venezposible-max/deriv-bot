@@ -8,7 +8,7 @@ const fs = require('fs');
 // CONFIGURACIÓN DEL BOT - MULTI-ESTRATEGIA
 // ==========================================
 const APP_ID = 1089;
-const SYMBOL = 'R_100';
+let SYMBOL = 'R_100'; // Símbolo por defecto
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
 // --- PARÁMETROS DINÁMICOS (ESTRATEGIA 1) ---
@@ -50,6 +50,7 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     pnlSession: 0,
+    activeSymbol: 'R_100', // Símbolo activo (R_100 o frxXAUUSD)
     currentContractId: null,
     currentMaxProfit: 0,
     lastSlAssigned: -12,
@@ -64,7 +65,8 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
-        console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Corriendo=${botState.isRunning}`);
+        if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
+        console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -149,6 +151,24 @@ app.post('/api/control', (req, res) => {
             botState.activeStrategy = strategy;
             saveState();
             console.log(`🔄 ESTRATEGIA SELECCIONADA: ${strategy}`);
+        }
+    }
+
+    // --- CAMBIO DE SÍMBOLO (ORO / V100) ---
+    const targetSymbol = req.body.symbol;
+    if (targetSymbol && (targetSymbol === 'R_100' || targetSymbol === 'frxXAUUSD')) {
+        if (botState.isRunning && botState.activeSymbol !== targetSymbol) {
+            return res.status(400).json({ success: false, error: "Detén el bot para cambiar de mercado." });
+        }
+        botState.activeSymbol = targetSymbol;
+        SYMBOL = targetSymbol;
+        saveState();
+        console.log(`🌍 MERCADO CAMBIADO A: ${SYMBOL === 'R_100' ? 'Volatility 100' : 'Oro (Gold)'}`);
+
+        // Re-suscribirse a los ticks si ya estamos conectados
+        if (ws && botState.isConnectedToDeriv) {
+            ws.send(JSON.stringify({ forget_all: 'ticks' }));
+            ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
         }
     }
 
@@ -239,7 +259,8 @@ function connectDeriv() {
 
         if (msg.msg_type === 'portfolio') {
             msg.portfolio.contracts.forEach(c => {
-                if (c.symbol === SYMBOL && !c.expiry_time && !botState.activeContracts.find(ac => ac.id === c.contract_id)) {
+                const isCorrectSymbol = c.symbol === SYMBOL || (SYMBOL === 'frxXAUUSD' && c.symbol.includes('XAUUSD'));
+                if (isCorrectSymbol && !c.expiry_time && !botState.activeContracts.find(ac => ac.id === c.contract_id)) {
                     botState.activeContracts.push({ id: c.contract_id, profit: 0 });
                     botState.currentContractId = c.contract_id;
                     ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: c.contract_id, subscribe: 1 }));
