@@ -1,41 +1,71 @@
 const WebSocket = require('ws');
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 
 // ==========================================
 // CONFIGURACIÓN DEL BOT - ESTRATEGIA GANADORA
 // ==========================================
 const APP_ID = 1089;
 const SYMBOL = 'R_100';
+const STATE_FILE = path.join(__dirname, 'persistent-state.json');
+
 let MULTIPLIER = 40;
 let STAKE_AMOUNT = 3;
-let TP_AMOUNT = 0.30; // Take Profit fijo en $0.30
-// Sin Stop Loss - Liquidación total del stake
-const MOMENTUM_TICKS = 5;
+let TP_AMOUNT = 0.30;
+let MOMENTUM_TICKS = 3; // Cuántos ticks seguidos en una dirección para disparar
 
 // Auth y Variables
 const API_TOKEN = process.env.DERIV_TOKEN;
-const WEB_PASSWORD = process.env.WEB_PASSWORD || "colina123"; // Clave secreta para la web (Cámbiala en Railway)
+const WEB_PASSWORD = process.env.WEB_PASSWORD || "colina123";
 
 if (!API_TOKEN) {
     console.error('❌ ERROR: No se encontró el token de Deriv. Define DERIV_TOKEN en Railway.');
 }
 
-// ESTADOS GLOBALES DEL BOT
+// === ESTADO GLOBAL DEL BOT ===
 let botState = {
-    isRunning: true, // El "Switch" principal. Iniciamos encendidos por defecto
+    isRunning: true,
     isConnectedToDeriv: false,
     balance: 0,
     totalTradesSession: 0,
     winsSession: 0,
     lossesSession: 0,
     pnlSession: 0,
-    currentContractId: null, // Mantenemos para compatibilidad simple
-    activeContracts: [], // NUEVO: Para soportar múltiples operaciones
+    currentContractId: null,
+    activeContracts: [],
     activeProfit: 0,
     lastTradeTime: null,
     tradeHistory: []
 };
+
+// --- CARGAR ESTADO ---
+if (fs.existsSync(STATE_FILE)) {
+    try {
+        const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
+        console.log('📦 ESTADO RECUPERADO: Historial y métricas cargadas desde el disco.');
+    } catch (e) {
+        console.error('⚠️ Error cargando el estado persistente:', e);
+    }
+}
+
+// --- GUARDAR ESTADO ---
+function saveState() {
+    try {
+        const dataToSave = {
+            totalTradesSession: botState.totalTradesSession,
+            winsSession: botState.winsSession,
+            lossesSession: botState.lossesSession,
+            pnlSession: botState.pnlSession,
+            tradeHistory: botState.tradeHistory
+        };
+        fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
+    } catch (e) {
+        console.error('⚠️ Error guardando el estado:', e);
+    }
+}
 
 let ws;
 let isBuying = false;
@@ -148,6 +178,7 @@ app.post('/api/clear-history', (req, res) => {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
     botState.tradeHistory = [];
+    saveState();
     console.log('🧹 COMANDO REMOTO: Historial de trades limpiado.');
     return res.json({ success: true, message: 'Historial limpiado' });
 });
@@ -307,6 +338,8 @@ function connectDeriv() {
                     timestamp: new Date().toLocaleTimeString()
                 });
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
+
+                saveState();
 
                 // Cooldown: 15 segs
                 cooldownTime = 15;
