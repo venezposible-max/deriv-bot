@@ -149,6 +149,13 @@ function connectDeriv() {
             botState.balance = msg.authorize.balance;
             console.log(`✅ Autorizado. Saldo: $${botState.balance}`);
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
+            // Suscribirse a actualizaciones de saldo
+            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+        }
+
+        // Catch: Actualización de Saldo
+        if (msg.msg_type === 'balance') {
+            botState.balance = msg.balance.balance;
         }
 
         // Ticks en Tiempo Real (Procesador de Estrategia)
@@ -208,6 +215,9 @@ function connectDeriv() {
                 botState.currentContractId = null;
                 botState.activeProfit = 0;
                 isBuying = false;
+
+                // Pedir saldo actualizado
+                ws.send(JSON.stringify({ balance: 1 }));
 
                 // Añadir al historial
                 botState.tradeHistory.unshift({
