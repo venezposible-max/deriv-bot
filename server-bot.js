@@ -213,6 +213,7 @@ function connectDeriv() {
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
             botState.balance = msg.authorize.balance;
+            console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
             ws.send(JSON.stringify({ portfolio: 1 }));
@@ -228,7 +229,10 @@ function connectDeriv() {
             });
         }
 
-        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
+        if (msg.msg_type === 'balance') {
+            botState.balance = msg.balance.balance;
+            console.log(`💰 ACTUALIZACIÓN DE SALDO: $${botState.balance}`);
+        }
 
         if (msg.msg_type === 'tick') {
             const quote = parseFloat(msg.tick.quote);
