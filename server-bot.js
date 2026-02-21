@@ -19,16 +19,17 @@ let DYNAMIC_CONFIG = {
     momentum: 3
 };
 
-// --- PARÁMETROS SNIPER PRO (ESTRATEGIA 2 - FIJOS POR AHORA) ---
+// --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
 const SNIPER_CONFIG = {
     stake: 20,
     takeProfit: 4.00,
+    stopLoss: 12.00, // Protección Blindada
     multiplier: 40,
-    smaPeriod: 25,
+    smaPeriod: 50,
     rsiPeriod: 14,
-    rsiLow: 35,
-    rsiHigh: 65,
-    momentum: 3
+    rsiLow: 30, // Filtro de zona para UP
+    rsiHigh: 70, // Filtro de zona para DOWN
+    momentum: 5   // 5 Ticks de confirmación
 };
 
 // Auth y Variables
@@ -266,13 +267,15 @@ function connectDeriv() {
                     let direction = null;
 
                     if (botState.activeStrategy === 'SNIPER') {
-                        // --- LÓGICA SNIPER PRO ---
-                        const sma = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                        // --- LÓGICA TREND SNIPER V3 (Seguir Tendencia) ---
+                        const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
                         const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
 
-                        if (sma && rsi) {
-                            if (allDown && quote > sma && rsi < SNIPER_CONFIG.rsiLow) direction = 'MULTUP';
-                            if (allUp && quote < sma && rsi > SNIPER_CONFIG.rsiHigh) direction = 'MULTDOWN';
+                        if (trend && rsi) {
+                            // UP si tendencia alcista + fuerza confirmada + rsi no agotado
+                            if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
+                            // DOWN si tendencia bajista + fuerza confirmada + rsi no agotado
+                            if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
                         }
                     } else {
                         // --- LÓGICA DINÁMICA (ORIGINAL) ---
@@ -345,12 +348,17 @@ function executeTrade(type) {
     const safeAmt = Math.max(1, config.stake);
 
     console.log(`🚀 [${botState.activeStrategy}] Disparando: ${type} | Stake: $${safeAmt}`);
+    const limitOrder = { take_profit: config.takeProfit };
+    if (config.stopLoss) {
+        limitOrder.stop_loss = config.stopLoss;
+    }
+
     ws.send(JSON.stringify({
         buy: 1, price: safeAmt,
         parameters: {
             amount: safeAmt, basis: "stake", contract_type: type, currency: "USD",
             multiplier: config.multiplier, symbol: SYMBOL,
-            limit_order: { take_profit: config.takeProfit }
+            limit_order: limitOrder
         }
     }));
     setTimeout(() => { if (isBuying) isBuying = false; }, 5000);
