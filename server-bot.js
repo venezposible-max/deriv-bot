@@ -235,6 +235,14 @@ function connectDeriv() {
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: botState.currentContractId, subscribe: 1 }));
         }
 
+        // Catch: Confirmación de Venta (Manual o Auto)
+        if (msg.msg_type === 'sell') {
+            const contract_id = msg.sell.contract_id;
+            console.log(`✅ Contrato ${contract_id} vendido satisfactoriamente.`);
+            // Forzamos una última lectura del contrato para asegurar que entre al historial
+            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contract_id }));
+        }
+
         // Catch: Rastreo del Contrato Activo (Saber cuándo cerró por TP/SL y calcular Profit en vivo)
         if (msg.msg_type === 'proposal_open_contract') {
             const contract = msg.proposal_open_contract;
