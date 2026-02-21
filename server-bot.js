@@ -5,16 +5,31 @@ const path = require('path');
 const fs = require('fs');
 
 // ==========================================
-// CONFIGURACIÓN DEL BOT - ESTRATEGIA GANADORA
+// CONFIGURACIÓN DEL BOT - MULTI-ESTRATEGIA
 // ==========================================
 const APP_ID = 1089;
 const SYMBOL = 'R_100';
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
-let MULTIPLIER = 40;
-let STAKE_AMOUNT = 3;
-let TP_AMOUNT = 0.30;
-let MOMENTUM_TICKS = 3; // Cuántos ticks seguidos en una dirección para disparar
+// --- PARÁMETROS DINÁMICOS (ESTRATEGIA 1) ---
+let DYNAMIC_CONFIG = {
+    stake: 3,
+    takeProfit: 0.30,
+    multiplier: 40,
+    momentum: 3
+};
+
+// --- PARÁMETROS SNIPER PRO (ESTRATEGIA 2 - FIJOS POR AHORA) ---
+const SNIPER_CONFIG = {
+    stake: 20,
+    takeProfit: 4.00,
+    multiplier: 40,
+    smaPeriod: 25,
+    rsiPeriod: 14,
+    rsiLow: 35,
+    rsiHigh: 65,
+    momentum: 3
+};
 
 // Auth y Variables
 const API_TOKEN = process.env.DERIV_TOKEN;
@@ -27,6 +42,7 @@ if (!API_TOKEN) {
 // === ESTADO GLOBAL DEL BOT ===
 let botState = {
     isRunning: true,
+    activeStrategy: 'DYNAMIC', // 'DYNAMIC' o 'SNIPER'
     isConnectedToDeriv: false,
     balance: 0,
     totalTradesSession: 0,
@@ -45,7 +61,7 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
-        console.log('📦 ESTADO RECUPERADO: Historial y métricas cargadas desde el disco.');
+        console.log('📦 ESTADO RECUPERADO: Historial y métricas cargadas.');
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -59,7 +75,8 @@ function saveState() {
             winsSession: botState.winsSession,
             lossesSession: botState.lossesSession,
             pnlSession: botState.pnlSession,
-            tradeHistory: botState.tradeHistory
+            tradeHistory: botState.tradeHistory,
+            activeStrategy: botState.activeStrategy
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -67,79 +84,86 @@ function saveState() {
     }
 }
 
+// --- INDICADORES TÉCNICOS ---
+function calculateSMA(prices, period) {
+    if (prices.length < period) return null;
+    const sum = prices.slice(-period).reduce((a, b) => a + b, 0);
+    return sum / period;
+}
+
+function calculateRSI(prices, period = 14) {
+    if (prices.length < period + 1) return null;
+    let gains = 0, losses = 0;
+    const slice = prices.slice(-period - 1);
+    for (let i = 1; i < slice.length; i++) {
+        const diff = slice[i] - slice[i - 1];
+        if (diff > 0) gains += diff; else losses += Math.abs(diff);
+    }
+    const avgLoss = losses / (period || 1);
+    if (avgLoss === 0) return 100;
+    const rs = (gains / period) / avgLoss;
+    return 100 - (100 / (1 + rs));
+}
+
 let ws;
 let isBuying = false;
 let cooldownTime = 0;
 let tickHistory = [];
 
-console.log('🚀 Iniciando Servidor 24/7 (Express + WS)...');
+console.log('🚀 Iniciando Servidor Multi-Estrategia 24/7...');
 
 // ==========================================
-// SERVIDOR WEB (CONTROL REMOTO PARA VERCEL)
+// SERVIDOR WEB (CONTROL REMOTO)
 // ==========================================
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-// Servir archivos estáticos de la web
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Endpoint 1: Ver estado del Bot (La web de Vercel llamará a esto para actualizar la UI)
 app.get('/api/status', (req, res) => {
     res.json({
         success: true,
         data: botState,
-        config: {
-            stake: STAKE_AMOUNT,
-            takeProfit: TP_AMOUNT,
-            multiplier: MULTIPLIER
-        }
+        config: botState.activeStrategy === 'DYNAMIC' ? DYNAMIC_CONFIG : SNIPER_CONFIG,
+        isSniper: botState.activeStrategy === 'SNIPER'
     });
 });
 
-// Endpoint 2: Control Remoto (Pausar / Reanudar)
 app.post('/api/control', (req, res) => {
-    const { action, password, stake, takeProfit, multiplier } = req.body;
+    const { action, password, stake, takeProfit, multiplier, strategy } = req.body;
 
-    // Medida de seguridad básica (La misma clave debe estar configurada en la App Web)
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
+    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER')) {
+        botState.activeStrategy = strategy;
+        saveState();
+        console.log(`🔄 CAMBIO DE ESTRATEGIA: Ahora en modo ${strategy}`);
+    }
+
     if (action === 'START') {
         botState.isRunning = true;
-
-        // Actualizar parámetros si se envían
-        if (stake) STAKE_AMOUNT = Number(stake);
-        if (takeProfit) TP_AMOUNT = Number(takeProfit);
-        if (multiplier) MULTIPLIER = Number(multiplier);
-
-        console.log(`▶️ COMANDO REMOTO: Bot Reanudado. Stake: $${STAKE_AMOUNT} | TP: $${TP_AMOUNT} | Mult: x${MULTIPLIER}`);
-        return res.json({ success: true, message: 'Bot Activado', isRunning: true, config: { stake: STAKE_AMOUNT, takeProfit: TP_AMOUNT, multiplier: MULTIPLIER } });
+        if (botState.activeStrategy === 'DYNAMIC') {
+            if (stake) DYNAMIC_CONFIG.stake = Number(stake);
+            if (takeProfit) DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
+            if (multiplier) DYNAMIC_CONFIG.multiplier = Number(multiplier);
+        }
+        return res.json({ success: true, message: `Bot ${botState.activeStrategy} Activado`, isRunning: true });
     }
 
     if (action === 'STOP') {
         botState.isRunning = false;
-        console.log('⏸️ COMANDO REMOTO: Bot Pausado.');
-        // Nota: Solo se pausa la captura de nuevas operaciones. Las operaciones abiertas por Deriv siguen su curso hasta TP/SL.
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });
 });
 
-// Endpoint 3: Disparo Manual (El Frontend ya no se conectará por WebSocket, le pedirá al backend que dispare)
 app.post('/api/trade', (req, res) => {
-    const { action, password } = req.body; // action: MULTUP o MULTDOWN
-
-    if (password !== WEB_PASSWORD) {
-        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
-    }
-
-    if (botState.currentContractId || isBuying) {
-        return res.status(400).json({ success: false, error: 'Ya hay una operación en curso.' });
-    }
-
+    const { action, password } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación en curso.' });
     if (action === 'MULTUP' || action === 'MULTDOWN') {
         executeTrade(action);
         return res.json({ success: true, message: `Disparo ${action} enviado` });
@@ -147,135 +171,101 @@ app.post('/api/trade', (req, res) => {
     res.status(400).json({ success: false, error: 'Acción de trade inválida' });
 });
 
-// Endpoint 4: Cerrar operación manualmente
 app.post('/api/close', (req, res) => {
     const { password, contractId } = req.body;
-
-    if (password !== WEB_PASSWORD) {
-        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
-    }
-
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     const idToClose = contractId || botState.currentContractId;
-
-    if (!idToClose) {
-        return res.status(400).json({ success: false, error: 'No hay ninguna operación activa para cerrar.' });
-    }
-
-    console.log(`⏹️ COMANDO REMOTO: Intentando cerrar contrato ${idToClose} manualmente...`);
-    ws.send(JSON.stringify({
-        sell: idToClose,
-        price: 0
-    }));
-
+    if (!idToClose) return res.status(400).json({ success: false, error: 'No hay ninguna operación activa.' });
+    ws.send(JSON.stringify({ sell: idToClose, price: 0 }));
     return res.json({ success: true, message: `Orden de cierre enviada para ${idToClose}` });
 });
 
-// Endpoint 5: Limpiar historial y estadísticas
 app.post('/api/clear-history', (req, res) => {
     const { password } = req.body;
-    if (password !== WEB_PASSWORD) {
-        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
-    }
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     botState.tradeHistory = [];
     botState.totalTradesSession = 0;
     botState.winsSession = 0;
     botState.lossesSession = 0;
     botState.pnlSession = 0;
-
     saveState();
-    console.log('🧹 COMANDO REMOTO: Historial y estadísticas limpiadas.');
-    return res.json({ success: true, message: 'Estadísticas reiniciadas correctamente' });
+    return res.json({ success: true, message: 'Estadísticas reiniciadas' });
 });
 
-// Fallback para SPA (Servir index.html para cualquier ruta que no sea API)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// Arrancar servidor Express (Railway usará el puerto dinámico Process.env.PORT)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🌍 Módulo Web levantado en el puerto ${PORT}`);
-});
-
+app.listen(PORT, () => console.log(`🌍 Módulo Web en puerto ${PORT}`));
 
 // ==========================================
-// NÚCLEO DEL BOT (WEBSOCKET DERIV)
+// NÚCLEO DEL BOT (DERIV)
 // ==========================================
 function connectDeriv() {
     if (!API_TOKEN) return;
-
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
-    ws.on('open', () => {
-        console.log('🌐 Conectado a Deriv. Autenticando...');
-        ws.send(JSON.stringify({ authorize: API_TOKEN }));
-    });
+    ws.on('open', () => ws.send(JSON.stringify({ authorize: API_TOKEN })));
 
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
+        if (msg.error) { console.error(`⚠️ Error: ${msg.error.message}`); isBuying = false; return; }
 
-        // Errores
-        if (msg.error) {
-            console.error(`⚠️ Error: ${msg.error.message}`);
-            isBuying = false;
-            return;
-        }
-
-        // Auth Exitosa
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
             botState.balance = msg.authorize.balance;
-            console.log(`✅ Autorizado. Saldo: $${botState.balance}`);
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-            // Suscribirse a actualizaciones de saldo
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-            // RECOPERACIÓN: Buscar si hay contratos abiertos (por si el server se reinició)
             ws.send(JSON.stringify({ portfolio: 1 }));
         }
 
-        // Catch: Listado de Portfolio (para recuperar trades activos)
         if (msg.msg_type === 'portfolio') {
-            const contracts = msg.portfolio.contracts;
-            contracts.forEach(c => {
-                if (c.symbol === SYMBOL && !c.expiry_time) {
-                    if (!botState.activeContracts.find(ac => ac.id === c.contract_id)) {
-                        botState.activeContracts.push({ id: c.contract_id, profit: 0 });
-                        botState.currentContractId = c.contract_id; // Para legacy
-                        ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: c.contract_id, subscribe: 1 }));
-                    }
+            msg.portfolio.contracts.forEach(c => {
+                if (c.symbol === SYMBOL && !c.expiry_time && !botState.activeContracts.find(ac => ac.id === c.contract_id)) {
+                    botState.activeContracts.push({ id: c.contract_id, profit: 0 });
+                    botState.currentContractId = c.contract_id;
+                    ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: c.contract_id, subscribe: 1 }));
                 }
             });
         }
 
-        // Catch: Actualización de Saldo
-        if (msg.msg_type === 'balance') {
-            botState.balance = msg.balance.balance;
-        }
+        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
 
-        // Ticks en Tiempo Real (Procesador de Estrategia)
         if (msg.msg_type === 'tick') {
             const quote = parseFloat(msg.tick.quote);
             tickHistory.push(quote);
-            if (tickHistory.length > 20) tickHistory.shift(); // Max memoria 20 ticks
+            if (tickHistory.length > 100) tickHistory.shift();
 
-            // ¿EL SWITCH ESTÁ ENCENDIDO? Solo operamos si botState.isRunning === true
-            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && cooldownTime === 0 && !isBuying && tickHistory.length >= MOMENTUM_TICKS) {
-                const lastTicks = tickHistory.slice(-MOMENTUM_TICKS);
-                const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
-                const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
+            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && cooldownTime === 0 && !isBuying) {
 
-                let direction = null;
-                if (allDown) direction = 'MULTUP';
-                if (allUp) direction = 'MULTDOWN';
+                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : DYNAMIC_CONFIG;
 
-                if (direction) {
-                    executeTrade(direction);
+                if (tickHistory.length >= currentConfig.momentum) {
+                    const lastTicks = tickHistory.slice(-currentConfig.momentum);
+                    const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
+                    const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
+
+                    let direction = null;
+
+                    if (botState.activeStrategy === 'SNIPER') {
+                        // --- LÓGICA SNIPER PRO ---
+                        const sma = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                        const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
+
+                        if (sma && rsi) {
+                            if (allDown && quote > sma && rsi < SNIPER_CONFIG.rsiLow) direction = 'MULTUP';
+                            if (allUp && quote < sma && rsi > SNIPER_CONFIG.rsiHigh) direction = 'MULTDOWN';
+                        }
+                    } else {
+                        // --- LÓGICA DINÁMICA (ORIGINAL) ---
+                        if (allDown) direction = 'MULTUP';
+                        if (allUp) direction = 'MULTDOWN';
+                    }
+
+                    if (direction) executeTrade(direction);
                 }
             }
         }
 
-        // Catch: Compra generada exitosa
         if (msg.msg_type === 'buy') {
             isBuying = false;
             const newId = msg.buy.contract_id;
@@ -283,118 +273,68 @@ function connectDeriv() {
             botState.currentContractId = newId;
             botState.balance = msg.buy.balance_after;
             botState.lastTradeTime = new Date().toISOString();
-            console.log(`🛒 Trade ABIERTO ID: ${newId}. Total activos: ${botState.activeContracts.length}`);
-
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: newId, subscribe: 1 }));
         }
 
-        // Catch: Confirmación de Venta (Manual o Auto)
-        if (msg.msg_type === 'sell') {
-            const contract_id = msg.sell.contract_id;
-            console.log(`✅ Contrato ${contract_id} vendido satisfactoriamente.`);
-            // Forzamos una última lectura del contrato para asegurar que entre al historial
-            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contract_id }));
-        }
-
-        // Catch: Rastreo del Contrato Activo
         if (msg.msg_type === 'proposal_open_contract') {
             const contract = msg.proposal_open_contract;
-
             if (contract && !contract.is_sold) {
                 const idx = botState.activeContracts.findIndex(ac => ac.id === contract.contract_id);
                 if (idx !== -1) {
                     botState.activeContracts[idx].profit = parseFloat(contract.profit || 0);
-                    // Actualizar activeProfit global para el widget principal (el más nuevo)
-                    if (contract.contract_id === botState.currentContractId) {
-                        botState.activeProfit = botState.activeContracts[idx].profit;
-                    }
+                    if (contract.contract_id === botState.currentContractId) botState.activeProfit = botState.activeContracts[idx].profit;
                 }
             }
 
             if (contract && contract.is_sold) {
                 const profit = parseFloat(contract.profit);
-                const isWin = profit > 0;
-
-                // Remover de activos
                 botState.activeContracts = botState.activeContracts.filter(ac => ac.id !== contract.contract_id);
                 if (botState.currentContractId === contract.contract_id) {
                     botState.currentContractId = botState.activeContracts.length > 0 ? botState.activeContracts[0].id : null;
                     botState.activeProfit = 0;
                 }
-
-                console.log(`\n🏁 CONTRATO CERRADO: ${isWin ? '🟢 WIN' : '🔴 LOSS'} -> $${profit.toFixed(2)}`);
-
-                // Actualizar métricas del servidor
                 botState.totalTradesSession++;
                 botState.pnlSession += profit;
-                if (isWin) botState.winsSession++; else botState.lossesSession++;
-
+                if (profit > 0) botState.winsSession++; else botState.lossesSession++;
                 isBuying = false;
-
-                // Pedir saldo actualizado
                 ws.send(JSON.stringify({ balance: 1 }));
-
-                // Añadir al historial
-                botState.tradeHistory.unshift({
-                    id: contract.contract_id,
-                    type: contract.contract_type,
-                    profit: profit,
-                    timestamp: new Date().toLocaleTimeString()
-                });
+                botState.tradeHistory.unshift({ id: contract.contract_id, type: contract.contract_type, profit, timestamp: new Date().toLocaleTimeString() });
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
-
                 saveState();
 
-                // Cooldown: 15 segs
                 cooldownTime = 15;
-                console.log(`⏳ Enfriamiento antes del próximo análisis: 15 segs...`);
                 const timer = setInterval(() => {
                     cooldownTime--;
-                    if (cooldownTime <= 0) {
-                        clearInterval(timer);
-                        console.log('👀 Radar encendido de nuevo. Buscando señales...');
-                        tickHistory = []; // Borramos historial para que la próxima línea Momentum sea 100% fresca
-                    }
+                    if (cooldownTime <= 0) { clearInterval(timer); tickHistory = []; }
                 }, 1000);
-
-                // Desuscribir el streaming del contrato vendido
-                if (contract.id) ws.send(JSON.stringify({ forget: contract.id }));
             }
         }
     });
 
     ws.on('close', () => {
-        console.log('🔌 WebSocket cerrado por Deriv. Reconectando...');
         botState.isConnectedToDeriv = false;
         botState.currentContractId = null;
         isBuying = false;
         setTimeout(connectDeriv, 5000);
     });
-
-    ws.on('error', () => ws.close());
 }
 
-// Función que dispara la munición
 function executeTrade(type) {
     if (isBuying) return;
     isBuying = true;
-    const safeAmt = Math.max(1, STAKE_AMOUNT);
+    const config = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : DYNAMIC_CONFIG;
+    const safeAmt = Math.max(1, config.stake);
 
-    console.log(`🚀 [SEÑAL ENCONTRADA] Disparando: ${type} | Stake: $${safeAmt} | x${MULTIPLIER}`);
+    console.log(`🚀 [${botState.activeStrategy}] Disparando: ${type} | Stake: $${safeAmt}`);
     ws.send(JSON.stringify({
         buy: 1, price: safeAmt,
         parameters: {
             amount: safeAmt, basis: "stake", contract_type: type, currency: "USD",
-            multiplier: MULTIPLIER, symbol: SYMBOL,
-            limit_order: {
-                take_profit: TP_AMOUNT
-            }
+            multiplier: config.multiplier, symbol: SYMBOL,
+            limit_order: { take_profit: config.takeProfit }
         }
     }));
-
-    // Timeout antierrores
     setTimeout(() => { if (isBuying) isBuying = false; }, 5000);
 }
 
-// Arranca el motor
 connectDeriv();
