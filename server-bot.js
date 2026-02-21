@@ -41,8 +41,8 @@ if (!API_TOKEN) {
 
 // === ESTADO GLOBAL DEL BOT ===
 let botState = {
-    isRunning: true,
-    activeStrategy: 'DYNAMIC', // 'DYNAMIC' o 'SNIPER'
+    isRunning: false,
+    activeStrategy: 'SNIPER', // 'SNIPER' por defecto como pidió el usuario
     isConnectedToDeriv: false,
     balance: 0,
     totalTradesSession: 0,
@@ -61,7 +61,7 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
-        console.log('📦 ESTADO RECUPERADO: Historial y métricas cargadas.');
+        console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Corriendo=${botState.isRunning}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -76,7 +76,8 @@ function saveState() {
             lossesSession: botState.lossesSession,
             pnlSession: botState.pnlSession,
             tradeHistory: botState.tradeHistory,
-            activeStrategy: botState.activeStrategy
+            activeStrategy: botState.activeStrategy,
+            isRunning: botState.isRunning
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -150,16 +151,20 @@ app.post('/api/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
+        saveState(); // Guardar que el bot está encendido
         if (botState.activeStrategy === 'DYNAMIC') {
             if (stake) DYNAMIC_CONFIG.stake = Number(stake);
             if (takeProfit) DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
             if (multiplier) DYNAMIC_CONFIG.multiplier = Number(multiplier);
         }
+        console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} (Stake: ${stake || 'Default'})`);
         return res.json({ success: true, message: `Bot ${botState.activeStrategy} Activado`, isRunning: true });
     }
 
     if (action === 'STOP') {
         botState.isRunning = false;
+        saveState(); // Guardar que el bot está apagado
+        console.log(`⏸️ BOT DETENIDO: El usuario pausó el algoritmo.`);
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
 
