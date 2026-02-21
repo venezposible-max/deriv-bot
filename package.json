@@ -1,0 +1,12 @@
+{
+    "name": "deriv-bot",
+    "version": "1.0.0",
+    "description": "Bot de Deriv para ejecución 24/7 en Railway",
+    "main": "server-bot.js",
+    "scripts": {
+        "start": "node server-bot.js"
+    },
+    "dependencies": {
+        "ws": "^8.16.0"
+    }
+}
