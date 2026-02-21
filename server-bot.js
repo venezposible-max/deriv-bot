@@ -30,7 +30,8 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     pnlSession: 0,
-    currentContractId: null,
+    currentContractId: null, // Mantenemos para compatibilidad simple
+    activeContracts: [], // NUEVO: Para soportar múltiples operaciones
     activeProfit: 0,
     lastTradeTime: null,
     tradeHistory: []
@@ -119,23 +120,25 @@ app.post('/api/trade', (req, res) => {
 
 // Endpoint 4: Cerrar operación manualmente
 app.post('/api/close', (req, res) => {
-    const { password } = req.body;
+    const { password, contractId } = req.body;
 
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
-    if (!botState.currentContractId) {
+    const idToClose = contractId || botState.currentContractId;
+
+    if (!idToClose) {
         return res.status(400).json({ success: false, error: 'No hay ninguna operación activa para cerrar.' });
     }
 
-    console.log(`⏹️ COMANDO REMOTO: Intentando cerrar contrato ${botState.currentContractId} manualmente...`);
+    console.log(`⏹️ COMANDO REMOTO: Intentando cerrar contrato ${idToClose} manualmente...`);
     ws.send(JSON.stringify({
-        sell: botState.currentContractId,
-        price: 0 // Cerrar a precio de mercado
+        sell: idToClose,
+        price: 0
     }));
 
-    return res.json({ success: true, message: 'Orden de cierre enviada' });
+    return res.json({ success: true, message: `Orden de cierre enviada para ${idToClose}` });
 });
 
 // Endpoint 5: Limpiar historial
@@ -199,12 +202,15 @@ function connectDeriv() {
         // Catch: Listado de Portfolio (para recuperar trades activos)
         if (msg.msg_type === 'portfolio') {
             const contracts = msg.portfolio.contracts;
-            const active = contracts.find(c => c.symbol === SYMBOL && !c.expiry_time);
-            if (active && !botState.currentContractId) {
-                botState.currentContractId = active.contract_id;
-                console.log(`♻️ RECOPERACIÓN: Detectada operacion activa ID ${active.contract_id}. Re-vinculando...`);
-                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: botState.currentContractId, subscribe: 1 }));
-            }
+            contracts.forEach(c => {
+                if (c.symbol === SYMBOL && !c.expiry_time) {
+                    if (!botState.activeContracts.find(ac => ac.id === c.contract_id)) {
+                        botState.activeContracts.push({ id: c.contract_id, profit: 0 });
+                        botState.currentContractId = c.contract_id; // Para legacy
+                        ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: c.contract_id, subscribe: 1 }));
+                    }
+                }
+            });
         }
 
         // Catch: Actualización de Saldo
@@ -237,13 +243,14 @@ function connectDeriv() {
         // Catch: Compra generada exitosa
         if (msg.msg_type === 'buy') {
             isBuying = false;
-            botState.currentContractId = msg.buy.contract_id;
-            botState.balance = msg.buy.balance_after; // Actualizamos saldo
+            const newId = msg.buy.contract_id;
+            botState.activeContracts.push({ id: newId, profit: 0 });
+            botState.currentContractId = newId;
+            botState.balance = msg.buy.balance_after;
             botState.lastTradeTime = new Date().toISOString();
-            console.log(`🛒 Trade Abierto ID: ${botState.currentContractId}`);
+            console.log(`🛒 Trade ABIERTO ID: ${newId}. Total activos: ${botState.activeContracts.length}`);
 
-            // Queremos saber cuándo cierra para sumar el PnL
-            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: botState.currentContractId, subscribe: 1 }));
+            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: newId, subscribe: 1 }));
         }
 
         // Catch: Confirmación de Venta (Manual o Auto)
@@ -254,17 +261,31 @@ function connectDeriv() {
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contract_id }));
         }
 
-        // Catch: Rastreo del Contrato Activo (Saber cuándo cerró por TP/SL y calcular Profit en vivo)
+        // Catch: Rastreo del Contrato Activo
         if (msg.msg_type === 'proposal_open_contract') {
             const contract = msg.proposal_open_contract;
 
             if (contract && !contract.is_sold) {
-                botState.activeProfit = parseFloat(contract.profit || 0);
+                const idx = botState.activeContracts.findIndex(ac => ac.id === contract.contract_id);
+                if (idx !== -1) {
+                    botState.activeContracts[idx].profit = parseFloat(contract.profit || 0);
+                    // Actualizar activeProfit global para el widget principal (el más nuevo)
+                    if (contract.contract_id === botState.currentContractId) {
+                        botState.activeProfit = botState.activeContracts[idx].profit;
+                    }
+                }
             }
 
             if (contract && contract.is_sold) {
                 const profit = parseFloat(contract.profit);
                 const isWin = profit > 0;
+
+                // Remover de activos
+                botState.activeContracts = botState.activeContracts.filter(ac => ac.id !== contract.contract_id);
+                if (botState.currentContractId === contract.contract_id) {
+                    botState.currentContractId = botState.activeContracts.length > 0 ? botState.activeContracts[0].id : null;
+                    botState.activeProfit = 0;
+                }
 
                 console.log(`\n🏁 CONTRATO CERRADO: ${isWin ? '🟢 WIN' : '🔴 LOSS'} -> $${profit.toFixed(2)}`);
 
@@ -273,9 +294,6 @@ function connectDeriv() {
                 botState.pnlSession += profit;
                 if (isWin) botState.winsSession++; else botState.lossesSession++;
 
-                // Limpieza post-trade
-                botState.currentContractId = null;
-                botState.activeProfit = 0;
                 isBuying = false;
 
                 // Pedir saldo actualizado
