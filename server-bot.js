@@ -117,6 +117,27 @@ app.post('/api/trade', (req, res) => {
     res.status(400).json({ success: false, error: 'Acción de trade inválida' });
 });
 
+// Endpoint 4: Cerrar operación manualmente
+app.post('/api/close', (req, res) => {
+    const { password } = req.body;
+
+    if (password !== WEB_PASSWORD) {
+        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    }
+
+    if (!botState.currentContractId) {
+        return res.status(400).json({ success: false, error: 'No hay ninguna operación activa para cerrar.' });
+    }
+
+    console.log(`⏹️ COMANDO REMOTO: Intentando cerrar contrato ${botState.currentContractId} manualmente...`);
+    ws.send(JSON.stringify({
+        sell: botState.currentContractId,
+        price: 0 // Cerrar a precio de mercado
+    }));
+
+    return res.json({ success: true, message: 'Orden de cierre enviada' });
+});
+
 // Fallback para SPA (Servir index.html para cualquier ruta que no sea API)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
