@@ -170,16 +170,21 @@ app.post('/api/close', (req, res) => {
     return res.json({ success: true, message: `Orden de cierre enviada para ${idToClose}` });
 });
 
-// Endpoint 5: Limpiar historial
+// Endpoint 5: Limpiar historial y estadísticas
 app.post('/api/clear-history', (req, res) => {
     const { password } = req.body;
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
     botState.tradeHistory = [];
+    botState.totalTradesSession = 0;
+    botState.winsSession = 0;
+    botState.lossesSession = 0;
+    botState.pnlSession = 0;
+
     saveState();
-    console.log('🧹 COMANDO REMOTO: Historial de trades limpiado.');
-    return res.json({ success: true, message: 'Historial limpiado' });
+    console.log('🧹 COMANDO REMOTO: Historial y estadísticas limpiadas.');
+    return res.json({ success: true, message: 'Estadísticas reiniciadas correctamente' });
 });
 
 // Fallback para SPA (Servir index.html para cualquier ruta que no sea API)
