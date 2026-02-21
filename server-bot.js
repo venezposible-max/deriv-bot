@@ -151,13 +151,17 @@ app.post('/api/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
-        saveState(); // Guardar que el bot está encendido
+        saveState();
+
+        let actualStake = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG.stake : (stake || DYNAMIC_CONFIG.stake);
+
         if (botState.activeStrategy === 'DYNAMIC') {
             if (stake) DYNAMIC_CONFIG.stake = Number(stake);
             if (takeProfit) DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
             if (multiplier) DYNAMIC_CONFIG.multiplier = Number(multiplier);
         }
-        console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} (Stake: ${stake || 'Default'})`);
+
+        console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} | Stake Real: $${actualStake}`);
         return res.json({ success: true, message: `Bot ${botState.activeStrategy} Activado`, isRunning: true });
     }
 
