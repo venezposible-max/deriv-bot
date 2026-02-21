@@ -117,6 +117,11 @@ app.post('/api/trade', (req, res) => {
     res.status(400).json({ success: false, error: 'Acción de trade inválida' });
 });
 
+// Fallback para SPA (Servir index.html para cualquier ruta que no sea API)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Arrancar servidor Express (Railway usará el puerto dinámico Process.env.PORT)
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
