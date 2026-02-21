@@ -51,6 +51,8 @@ let botState = {
     lossesSession: 0,
     pnlSession: 0,
     currentContractId: null,
+    currentMaxProfit: 0,
+    lastSlAssigned: -12,
     activeContracts: [],
     activeProfit: 0,
     lastTradeTime: null,
@@ -303,8 +305,39 @@ function connectDeriv() {
             if (contract && !contract.is_sold) {
                 const idx = botState.activeContracts.findIndex(ac => ac.id === contract.contract_id);
                 if (idx !== -1) {
-                    botState.activeContracts[idx].profit = parseFloat(contract.profit || 0);
-                    if (contract.contract_id === botState.currentContractId) botState.activeProfit = botState.activeContracts[idx].profit;
+                    const currentProfit = parseFloat(contract.profit || 0);
+                    botState.activeContracts[idx].profit = currentProfit;
+
+                    if (contract.contract_id === botState.currentContractId) {
+                        botState.activeProfit = currentProfit;
+
+                        // --- LÓGICA ASEGURADOR (SOLO SNIPER) ---
+                        if (botState.activeStrategy === 'SNIPER') {
+                            if (currentProfit > botState.currentMaxProfit) {
+                                botState.currentMaxProfit = currentProfit;
+                            }
+
+                            let newSL = null;
+                            if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.00) {
+                                newSL = 2.00; // Asegura $2
+                            } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.00) {
+                                newSL = 1.00; // Asegura $1
+                            }
+
+                            if (newSL !== null) {
+                                botState.lastSlAssigned = newSL;
+                                console.log(`🛡️ ASEGURADOR: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Asegurando $${newSL.toFixed(2)}...`);
+                                ws.send(JSON.stringify({
+                                    contract_update: 1,
+                                    contract_id: contract.contract_id,
+                                    limit_order: {
+                                        stop_loss: newSL,
+                                        take_profit: SNIPER_CONFIG.takeProfit
+                                    }
+                                }));
+                            }
+                        }
+                    }
                 }
             }
 
@@ -314,6 +347,8 @@ function connectDeriv() {
                 if (botState.currentContractId === contract.contract_id) {
                     botState.currentContractId = botState.activeContracts.length > 0 ? botState.activeContracts[0].id : null;
                     botState.activeProfit = 0;
+                    botState.currentMaxProfit = 0;
+                    botState.lastSlAssigned = -12;
                 }
                 botState.totalTradesSession++;
                 botState.pnlSession += profit;
