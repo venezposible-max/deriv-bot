@@ -195,6 +195,18 @@ app.post('/api/control', (req, res) => {
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
 
+    if (action === 'FORCE_CLEAR') {
+        console.log('🧹 ADMIN: Limpieza manual de trades solicitada.');
+        botState.currentContractId = null;
+        botState.activeContracts = [];
+        botState.activeProfit = 0;
+        botState.currentMaxProfit = 0;
+        botState.lastSlAssigned = -12;
+        isBuying = false;
+        saveState();
+        return res.json({ success: true, message: 'Trades limpiados correctamente' });
+    }
+
     res.status(400).json({ success: false, error: 'Acción inválida' });
 });
 
@@ -246,7 +258,20 @@ function connectDeriv() {
 
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
-        if (msg.error) { console.error(`⚠️ Error: ${msg.error.message}`); isBuying = false; return; }
+        if (msg.error) {
+            console.error(`⚠️ Error: ${msg.error.message}`);
+            isBuying = false;
+
+            // --- AUTO-CLEAN GHOST TRADES ON ERROR ---
+            const errMsg = msg.error.message.toLowerCase();
+            if (errMsg.includes('expired') || errMsg.includes('not found') || errMsg.includes('invalid contract')) {
+                console.log('🧹 Limpiando trade fantasma detectado por error de Deriv...');
+                botState.currentContractId = null;
+                botState.activeContracts = [];
+                botState.activeProfit = 0;
+            }
+            return;
+        }
 
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
