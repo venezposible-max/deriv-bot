@@ -78,7 +78,6 @@ console.log('🚀 Iniciando Servidor 24/7 (Express + WS)...');
 // SERVIDOR WEB (CONTROL REMOTO PARA VERCEL)
 // ==========================================
 const app = express();
-const path = require('path');
 app.use(cors());
 app.use(express.json());
 
