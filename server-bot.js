@@ -296,12 +296,40 @@ function connectDeriv() {
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
             ws.send(JSON.stringify({ portfolio: 1 }));
+
+            // --- SYNC PERIODICO (Evitar Fantasmas) ---
+            if (global.syncTimer) clearInterval(global.syncTimer);
+            global.syncTimer = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ portfolio: 1 }));
+                }
+            }, 15000); // Cada 15 segundos reconciliamos
         }
 
         if (msg.msg_type === 'portfolio') {
-            msg.portfolio.contracts.forEach(c => {
+            const derivContracts = msg.portfolio.contracts || [];
+            const derivIds = derivContracts.map(c => c.contract_id);
+
+            // 1. RECONCILIACIÓN: Quitar trades que ya no existen en Deriv
+            const beforeCount = botState.activeContracts.length;
+            botState.activeContracts = botState.activeContracts.filter(ac => derivIds.includes(ac.id));
+
+            if (beforeCount > botState.activeContracts.length) {
+                console.log(`🧹 RECONCILIACIÓN: Se eliminaron ${beforeCount - botState.activeContracts.length} trades fantasma.`);
+                if (botState.activeContracts.length === 0) {
+                    botState.currentContractId = null;
+                    botState.activeProfit = 0;
+                } else if (!derivIds.includes(botState.currentContractId)) {
+                    botState.currentContractId = botState.activeContracts[0].id;
+                }
+                saveState();
+            }
+
+            // 2. ADOPCIÓN: Añadir trades que existen en Deriv pero no en el bot
+            derivContracts.forEach(c => {
                 const isCorrectSymbol = c.symbol === SYMBOL || (SYMBOL === 'frxXAUUSD' && c.symbol.includes('XAUUSD'));
                 if (isCorrectSymbol && !c.expiry_time && !botState.activeContracts.find(ac => ac.id === c.contract_id)) {
+                    console.log(`📥 ADOPTando trade de Deriv: ${c.contract_id}`);
                     botState.activeContracts.push({ id: c.contract_id, profit: 0 });
                     botState.currentContractId = c.contract_id;
                     ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: c.contract_id, subscribe: 1 }));
