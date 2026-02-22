@@ -33,6 +33,17 @@ const SNIPER_CONFIG = {
     momentum: 5   // 5 Ticks de confirmación
 };
 
+// --- PARÁMETROS PM-40 OK (PROFESIONAL ORO) ---
+const PM40_CONFIG = {
+    stake: 10,
+    takeProfit: 1.00,
+    stopLoss: 2.00,
+    multiplier: 40,
+    sma20Period: 20,
+    sma40Period: 40,
+    granularity: 60 // 1 minuto
+};
+
 // Auth y Variables
 const API_TOKEN = process.env.DERIV_TOKEN;
 const WEB_PASSWORD = process.env.WEB_PASSWORD || "colina123";
@@ -124,6 +135,8 @@ let ws;
 let isBuying = false;
 let cooldownTime = 0;
 let tickHistory = [];
+let candleHistory = [];
+let pm40Setup = { active: false, resistance: 0 };
 
 console.log('🚀 Iniciando Servidor Multi-Estrategia 24/7...');
 
@@ -152,7 +165,7 @@ app.post('/api/control', (req, res) => {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
-    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER')) {
+    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER' || strategy === 'PM40')) {
         if (botState.isRunning && botState.activeStrategy !== strategy) {
             console.log(`⚠️ INTENTO DE CAMBIO BLOQUEADO: No se puede cambiar a ${strategy} mientras ${botState.activeStrategy} está en ejecución.`);
             return res.status(400).json({ success: false, error: `El bot ya está corriendo en modo ${botState.activeStrategy}. Deténlo para cambiar.` });
@@ -160,6 +173,12 @@ app.post('/api/control', (req, res) => {
             botState.activeStrategy = strategy;
             saveState();
             console.log(`🔄 ESTRATEGIA SELECCIONADA: ${strategy}`);
+
+            // Si cambiamos a PM40, re-suscribirse a candles
+            if (strategy === 'PM40' && ws && botState.isConnectedToDeriv) {
+                ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
+                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
+            }
         }
     }
 
@@ -178,7 +197,11 @@ app.post('/api/control', (req, res) => {
         // Re-suscribirse a los ticks si ya estamos conectados
         if (ws && botState.isConnectedToDeriv) {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
+            ws.send(JSON.stringify({ forget_all: 'ohlc' }));
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
+            if (botState.activeStrategy === 'PM40') {
+                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
+            }
         }
 
         // Si solo estamos cambiando el símbolo sin otra acción, respondemos aquí
@@ -341,6 +364,9 @@ function connectDeriv() {
             botState.balance = msg.authorize.balance;
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
+            if (botState.activeStrategy === 'PM40') {
+                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
+            }
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
             ws.send(JSON.stringify({ portfolio: 1 }));
 
@@ -393,13 +419,13 @@ function connectDeriv() {
             botState.connectionError = null; // Si llegan ticks, el mercado está vivo
             const quote = parseFloat(msg.tick.quote);
             tickHistory.push(quote);
-            if (tickHistory.length > 100) tickHistory.shift();
+            if (tickHistory.length > 200) tickHistory.shift();
 
             if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying) {
 
-                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : DYNAMIC_CONFIG;
+                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : (botState.activeStrategy === 'PM40' ? PM40_CONFIG : DYNAMIC_CONFIG);
 
-                if (tickHistory.length >= currentConfig.momentum) {
+                if (botState.activeStrategy !== 'PM40' && tickHistory.length >= currentConfig.momentum) {
                     const lastTicks = tickHistory.slice(-currentConfig.momentum);
                     const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
                     const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
@@ -407,23 +433,71 @@ function connectDeriv() {
                     let direction = null;
 
                     if (botState.activeStrategy === 'SNIPER') {
-                        // --- LÓGICA TREND SNIPER V3 (Seguir Tendencia) ---
+                        // --- LÓGICA TREND SNIPER V3 ---
                         const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
                         const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-
                         if (trend && rsi) {
-                            // UP si tendencia alcista + fuerza confirmada + rsi no agotado
                             if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
-                            // DOWN si tendencia bajista + fuerza confirmada + rsi no agotado
                             if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
                         }
                     } else {
-                        // --- LÓGICA DINÁMICA (ORIGINAL) ---
+                        // --- LÓGICA DINÁMICA ---
                         if (allDown) direction = 'MULTUP';
                         if (allUp) direction = 'MULTDOWN';
                     }
 
                     if (direction) executeTrade(direction);
+                }
+            }
+        }
+
+        if (msg.msg_type === 'ohlc') {
+            const candle = msg.ohlc;
+            const open = parseFloat(candle.open);
+            const high = parseFloat(candle.high);
+            const low = parseFloat(candle.low);
+            const close = parseFloat(candle.close);
+            const entry = { open, high, low, close, epoch: candle.epoch };
+
+            // Solo guardamos velas cerradas o actualizamos la última
+            if (candleHistory.length > 0 && candleHistory[candleHistory.length - 1].epoch === candle.epoch) {
+                candleHistory[candleHistory.length - 1] = entry;
+            } else {
+                candleHistory.push(entry);
+            }
+            if (candleHistory.length > 100) candleHistory.shift();
+
+            // LÓGICA PM-40 OK (Solo para GOLD o cuando se seleccione PM40)
+            if (botState.isRunning && botState.activeStrategy === 'PM40' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying) {
+                if (candleHistory.length >= PM40_CONFIG.sma40Period) {
+                    const closes = candleHistory.map(c => c.close);
+                    const s20 = calculateSMA(closes, PM40_CONFIG.sma20Period);
+                    const s40 = calculateSMA(closes, PM40_CONFIG.sma40Period);
+
+                    if (s20 && s40 && s20 > s40) {
+                        const lastCandle = candleHistory[candleHistory.length - 1];
+
+                        // 1. Pullback: Si toca o se acerca a la SMA 40
+                        if (lastCandle.low <= s40 * 1.0002) {
+                            pm40Setup.active = true;
+                            pm40Setup.resistance = lastCandle.high;
+                            console.log(`🎯 PM-40: Pullback detectado. Esperando ruptura de $${pm40Setup.resistance}...`);
+                        }
+
+                        // 2. Disparo: Si rompe la resistencia
+                        if (pm40Setup.active) {
+                            if (lastCandle.close > pm40Setup.resistance) {
+                                console.log(`🚀 PM-40: ¡RUPTURA CONFIRMADA! Entrando en CALL.`);
+                                executeTrade('MULTUP');
+                                pm40Setup.active = false;
+                            } else {
+                                if (lastCandle.high < pm40Setup.resistance) pm40Setup.resistance = lastCandle.high;
+                                if (lastCandle.close < s40 * 0.998) pm40Setup.active = false;
+                            }
+                        }
+                    } else {
+                        pm40Setup.active = false;
+                    }
                 }
             }
         }
@@ -548,22 +622,41 @@ function sellContract(contractId) {
 function executeTrade(type) {
     if (isBuying) return;
     isBuying = true;
-    const config = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : DYNAMIC_CONFIG;
-    const safeAmt = Math.max(1, config.stake);
 
-    console.log(`🚀 [${botState.activeStrategy}] Disparando: ${type} | Stake: $${safeAmt}`);
-    const limitOrder = { take_profit: config.takeProfit };
+    // --- CONFIGURACIÓN DINÁMICA DE LIMITES ---
+    let actualStake, actualTP, actualSL, actualMult;
 
-    // Aplicar Stop Loss si está configurado (ya sea el blindado de Sniper o el nuevo de Dynamic)
-    if (config.stopLoss) {
-        limitOrder.stop_loss = config.stopLoss;
+    if (botState.activeStrategy === 'SNIPER') {
+        actualStake = SNIPER_CONFIG.stake;
+        actualTP = SNIPER_CONFIG.takeProfit;
+        actualSL = SNIPER_CONFIG.stopLoss;
+        actualMult = SNIPER_CONFIG.multiplier;
+    } else if (botState.activeStrategy === 'PM40') {
+        actualStake = PM40_CONFIG.stake;
+        actualTP = PM40_CONFIG.takeProfit;
+        actualSL = PM40_CONFIG.stopLoss;
+        actualMult = PM40_CONFIG.multiplier;
+    } else {
+        actualStake = DYNAMIC_CONFIG.stake;
+        actualTP = DYNAMIC_CONFIG.takeProfit;
+        actualSL = DYNAMIC_CONFIG.stopLoss;
+        actualMult = DYNAMIC_CONFIG.multiplier;
+    }
+
+    const safeAmt = Math.max(1, actualStake);
+
+    console.log(`🚀 [${botState.activeStrategy}] Disparando: ${type} | Stake: $${safeAmt} | TP: $${actualTP} | SL: $${actualSL}`);
+    const limitOrder = { take_profit: actualTP };
+
+    if (actualSL) {
+        limitOrder.stop_loss = actualSL;
     }
 
     ws.send(JSON.stringify({
         buy: 1, price: safeAmt,
         parameters: {
             amount: safeAmt, basis: "stake", contract_type: type, currency: "USD",
-            multiplier: config.multiplier, symbol: SYMBOL,
+            multiplier: actualMult, symbol: SYMBOL,
             limit_order: limitOrder
         }
     }));
