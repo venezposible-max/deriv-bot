@@ -61,6 +61,7 @@ let botState = {
     lastTradeTime: null,
     cooldownRemaining: 0, // Segundos de enfriamiento restantes
     customToken: null, // Token ingresado manualmente por el usuario
+    connectionError: null, // Error de conexión actual
     tradeHistory: []
 };
 
@@ -306,6 +307,7 @@ function connectDeriv() {
         const msg = JSON.parse(data);
         if (msg.error) {
             console.error(`⚠️ Error: ${msg.error.message}`);
+            botState.connectionError = msg.error.message;
             isBuying = false;
 
             // --- AUTO-CLEAN GHOST TRADES ON ERROR ---
@@ -329,6 +331,7 @@ function connectDeriv() {
 
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
+            botState.connectionError = null;
             botState.balance = msg.authorize.balance;
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
