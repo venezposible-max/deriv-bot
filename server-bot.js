@@ -16,7 +16,8 @@ let DYNAMIC_CONFIG = {
     stake: 10,
     takeProfit: 0.30,
     multiplier: 40,
-    momentum: 5
+    momentum: 5,
+    stopLoss: 3.00
 };
 
 // --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
@@ -185,6 +186,10 @@ app.post('/api/control', (req, res) => {
             if (takeProfit) DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
             if (multiplier) DYNAMIC_CONFIG.multiplier = Number(multiplier);
             if (req.body.momentum) DYNAMIC_CONFIG.momentum = Number(req.body.momentum);
+            if (req.body.stopLoss !== undefined) {
+                const slVal = Number(req.body.stopLoss);
+                DYNAMIC_CONFIG.stopLoss = slVal > 0 ? slVal : null;
+            }
         }
 
         console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} | Stake Real: $${actualStake}`);
@@ -454,6 +459,8 @@ function executeTrade(type) {
 
     console.log(`🚀 [${botState.activeStrategy}] Disparando: ${type} | Stake: $${safeAmt}`);
     const limitOrder = { take_profit: config.takeProfit };
+
+    // Aplicar Stop Loss si está configurado (ya sea el blindado de Sniper o el nuevo de Dynamic)
     if (config.stopLoss) {
         limitOrder.stop_loss = config.stopLoss;
     }
