@@ -451,7 +451,7 @@ function connectDeriv() {
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
                 saveState();
 
-                cooldownTime = 15;
+                cooldownTime = 60; // Enfriamiento de 1 minuto solicitado
                 const timer = setInterval(() => {
                     cooldownTime--;
                     if (cooldownTime <= 0) { clearInterval(timer); tickHistory = []; }
