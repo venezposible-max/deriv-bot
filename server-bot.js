@@ -174,7 +174,7 @@ app.post('/api/control', (req, res) => {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
-    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER' || strategy === 'PM40')) {
+    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER' || strategy === 'GOLD_MASTER' || strategy === 'PM40')) {
         if (botState.isRunning && botState.activeStrategy !== strategy) {
             console.log(`⚠️ INTENTO DE CAMBIO BLOQUEADO: No se puede cambiar a ${strategy} mientras ${botState.activeStrategy} está en ejecución.`);
             return res.status(400).json({ success: false, error: `El bot ya está corriendo en modo ${botState.activeStrategy}. Deténlo para cambiar.` });
@@ -183,8 +183,8 @@ app.post('/api/control', (req, res) => {
             saveState();
             console.log(`🔄 ESTRATEGIA SELECCIONADA: ${strategy}`);
 
-            // Si cambiamos a PM40, re-suscribirse a candles
-            if (strategy === 'PM40' && ws && botState.isConnectedToDeriv) {
+            // Si cambiamos a GOLD_MASTER (o antiguo PM40), re-suscribirse a candles
+            if ((strategy === 'GOLD_MASTER' || strategy === 'PM40') && ws && botState.isConnectedToDeriv) {
                 ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                 ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
             }
@@ -208,7 +208,7 @@ app.post('/api/control', (req, res) => {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'ohlc' }));
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-            if (botState.activeStrategy === 'PM40') {
+            if (botState.activeStrategy === 'GOLD_MASTER' || botState.activeStrategy === 'PM40') {
                 ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: 60, subscribe: 1 })); // M1
                 ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: 3600, subscribe: 1 })); // H1 Filtro
             }
@@ -499,8 +499,8 @@ function connectDeriv() {
                 botState.rsiValue = calculateRSI(closes, 14);
             }
 
-            // LÓGICA PM-40 BIDIRECCIONAL + FILTRO PRO MTF
-            if (botState.isRunning && botState.activeStrategy === 'PM40' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
+            // LÓGICA GOLD MASTER BIDIRECCIONAL + FILTRO PRO MTF
+            if (botState.isRunning && (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
 
                 const hour = new Date().getUTCHours();
                 if (hour < 11 || hour > 21) return; // Fuera de sesión profesional
@@ -698,7 +698,7 @@ function executeTrade(type, customTP = null, customSL = null) {
         actualTP = SNIPER_CONFIG.takeProfit;
         actualSL = SNIPER_CONFIG.stopLoss;
         actualMult = SNIPER_CONFIG.multiplier;
-    } else if (botState.activeStrategy === 'PM40') {
+    } else if (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') {
         actualStake = PM40_CONFIG.stake;
         actualTP = PM40_CONFIG.takeProfit;
         actualSL = PM40_CONFIG.stopLoss;

@@ -1,0 +1,133 @@
+const WebSocket = require('ws');
+
+const APP_ID = 1089;
+const SYMBOL = 'frxXAUUSD';
+const MULTIPLIER = 40;
+const TP_PCT = 0.10;
+const SL_PCT = 0.20;
+
+const endTS = Math.floor(Date.now() / 1000);
+const startTS = endTS - (30 * 24 * 60 * 60);
+
+console.log(`\n🔥 MASTER BACKTEST AGRESIVO (30 DÍAS): ORO (TODO AL BALANCE)`);
+console.log(`==========================================================`);
+console.log(`Estrategia: PM-40 OK + Filtro H1`);
+console.log(`Gestión: Reinvestir 100% del Saldo en cada trade`);
+console.log(`==========================================================\n`);
+
+const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+
+let h1Candles = [];
+let m1Candles = [];
+let balance = 10.00;
+
+ws.on('open', () => {
+    // Pedir H1 de todo el mes
+    ws.send(JSON.stringify({
+        ticks_history: SYMBOL,
+        end: 'latest',
+        start: startTS,
+        count: 5000,
+        granularity: 3600,
+        style: 'candles'
+    }));
+    // Pedir M1 (Lo máximo posible, aprox los últimos 5-7 días de mercado activo)
+    ws.send(JSON.stringify({
+        ticks_history: SYMBOL,
+        end: 'latest',
+        count: 5000,
+        granularity: 60,
+        style: 'candles'
+    }));
+});
+
+ws.on('message', (data) => {
+    const msg = JSON.parse(data);
+    if (msg.msg_type === 'candles') {
+        if (msg.echo_req.granularity === 60) m1Candles = msg.candles || [];
+        if (msg.echo_req.granularity === 3600) h1Candles = msg.candles || [];
+
+        if (m1Candles.length > 0 && h1Candles.length > 0) {
+            runAggressiveMonthlyBacktest();
+            ws.close();
+        }
+    }
+});
+
+function calculateSMA(prices, period) {
+    let smas = new Array(prices.length).fill(null);
+    for (let i = period - 1; i < prices.length; i++) {
+        let sum = 0;
+        for (let j = 0; j < period; j++) sum += prices[i - j];
+        smas[i] = sum / period;
+    }
+    return smas;
+}
+
+function runAggressiveMonthlyBacktest() {
+    const m1Closes = m1Candles.map(c => c.close);
+    const m1S20 = calculateSMA(m1Closes, 20);
+    const m1S40 = calculateSMA(m1Closes, 40);
+    const h1Closes = h1Candles.map(c => c.close);
+    const h1S20 = calculateSMA(h1Closes, 20);
+    const h1S40 = calculateSMA(h1Closes, 40);
+
+    let dayMap = {};
+    m1Candles.forEach((c, i) => {
+        const date = new Date(c.epoch * 1000).toISOString().split('T')[0];
+        if (!dayMap[date]) dayMap[date] = [];
+        dayMap[date].push({ candle: c, index: i });
+    });
+
+    const dates = Object.keys(dayMap).sort();
+
+    dates.forEach(date => {
+        let dayWins = 0, dayLosses = 0;
+        let setup = false, resistance = 0;
+
+        for (const event of dayMap[date]) {
+            const i = event.index;
+            const c = event.candle;
+            if (balance < 1) break;
+
+            const currentH1 = h1Candles.findLast(h => h.epoch <= c.epoch);
+            const h1Idx = h1Candles.indexOf(currentH1);
+            let h1TrendUp = h1Idx >= 40 ? h1S20[h1Idx] > h1S40[h1Idx] : true;
+
+            if (m1S20[i] > m1S40[i] && h1TrendUp) {
+                if (c.low <= m1S40[i] * 1.0002) {
+                    setup = true; resistance = c.high;
+                } else if (setup && c.close > resistance) {
+                    let currentStake = balance;
+                    let tp = currentStake * TP_PCT;
+                    let sl = currentStake * SL_PCT;
+                    let outcome = -sl;
+
+                    // Simular trade
+                    for (let j = i + 1; j < m1Candles.length; j++) {
+                        const prof = ((m1Candles[j].high - m1Candles[i + 1].open) / m1Candles[i + 1].open) * MULTIPLIER * currentStake;
+                        const loss = ((m1Candles[j].low - m1Candles[i + 1].open) / m1Candles[i + 1].open) * MULTIPLIER * currentStake;
+                        if (prof >= tp) { outcome = tp; break; }
+                        if (loss <= -sl) { outcome = -sl; break; }
+                    }
+                    balance += outcome;
+                    if (outcome > 0) dayWins++; else dayLosses++;
+                    setup = false;
+                } else if (setup && c.close < m1S40[i]) setup = false;
+            } else setup = false;
+        }
+        console.log(`📅 ${date}: Saldo Final $${balance.toFixed(2)} | W:${dayWins} L:${dayLosses}`);
+    });
+
+    // Proyección estadística para los 30 días basada en el rendimiento real observado
+    const daysSampled = dates.length;
+    const finalBalance = balance;
+    const growthFactor = Math.pow(finalBalance / 10, 30 / daysSampled);
+
+    console.log(`\n--------------------------------------------------`);
+    console.log(`🏆 RESUMEN REAL (Muestra de ${daysSampled} días):`);
+    console.log(`Saldo real alcanzado: $${finalBalance.toFixed(2)}`);
+    console.log(`\n🚀 PROYECCIÓN A 30 DÍAS (Basada en rendimiento actual):`);
+    console.log(`Saldo proyectado: $${(10 * growthFactor).toFixed(2)}`);
+    console.log(`--------------------------------------------------\n`);
+}
