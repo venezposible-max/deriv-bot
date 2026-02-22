@@ -171,6 +171,7 @@ app.post('/api/control', (req, res) => {
         }
         botState.activeSymbol = targetSymbol;
         SYMBOL = targetSymbol;
+        botState.connectionError = null; // Limpiamos error al cambiar mercado
         saveState();
         console.log(`🌍 MERCADO CAMBIADO A: ${SYMBOL === 'R_100' ? 'Volatility 100' : 'Oro (Gold)'}`);
 
@@ -389,6 +390,7 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'tick') {
+            botState.connectionError = null; // Si llegan ticks, el mercado está vivo
             const quote = parseFloat(msg.tick.quote);
             tickHistory.push(quote);
             if (tickHistory.length > 100) tickHistory.shift();
