@@ -58,6 +58,7 @@ let botState = {
     activeContracts: [],
     activeProfit: 0,
     lastTradeTime: null,
+    cooldownRemaining: 0, // Segundos de enfriamiento restantes
     tradeHistory: []
 };
 
@@ -347,7 +348,7 @@ function connectDeriv() {
             tickHistory.push(quote);
             if (tickHistory.length > 100) tickHistory.shift();
 
-            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && cooldownTime === 0 && !isBuying) {
+            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying) {
 
                 const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : DYNAMIC_CONFIG;
 
@@ -451,10 +452,14 @@ function connectDeriv() {
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
                 saveState();
 
-                cooldownTime = 60; // Enfriamiento de 1 minuto solicitado
+                botState.cooldownRemaining = 60; // Enfriamiento de 1 minuto solicitado
                 const timer = setInterval(() => {
-                    cooldownTime--;
-                    if (cooldownTime <= 0) { clearInterval(timer); tickHistory = []; }
+                    botState.cooldownRemaining--;
+                    if (botState.cooldownRemaining <= 0) {
+                        botState.cooldownRemaining = 0;
+                        clearInterval(timer);
+                        tickHistory = [];
+                    }
                 }, 1000);
             }
         }
