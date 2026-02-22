@@ -13,10 +13,10 @@ const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
 // --- PARÁMETROS DINÁMICOS (ESTRATEGIA 1) ---
 let DYNAMIC_CONFIG = {
-    stake: 3,
+    stake: 10,
     takeProfit: 0.30,
     multiplier: 40,
-    momentum: 3
+    momentum: 5
 };
 
 // --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
@@ -65,6 +65,7 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
+        if (saved.DYNAMIC_CONFIG) DYNAMIC_CONFIG = { ...DYNAMIC_CONFIG, ...saved.DYNAMIC_CONFIG };
         if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
         console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
@@ -82,7 +83,8 @@ function saveState() {
             pnlSession: botState.pnlSession,
             tradeHistory: botState.tradeHistory,
             activeStrategy: botState.activeStrategy,
-            isRunning: botState.isRunning
+            isRunning: botState.isRunning,
+            DYNAMIC_CONFIG: DYNAMIC_CONFIG
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -182,6 +184,7 @@ app.post('/api/control', (req, res) => {
             if (stake) DYNAMIC_CONFIG.stake = Number(stake);
             if (takeProfit) DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
             if (multiplier) DYNAMIC_CONFIG.multiplier = Number(multiplier);
+            if (req.body.momentum) DYNAMIC_CONFIG.momentum = Number(req.body.momentum);
         }
 
         console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} | Stake Real: $${actualStake}`);
