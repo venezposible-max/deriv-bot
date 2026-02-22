@@ -87,7 +87,6 @@ if (fs.existsSync(STATE_FILE)) {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
         if (saved.DYNAMIC_CONFIG) DYNAMIC_CONFIG = { ...DYNAMIC_CONFIG, ...saved.DYNAMIC_CONFIG };
-        if (saved.customToken) botState.customToken = saved.customToken;
         if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
         console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
@@ -106,8 +105,7 @@ function saveState() {
             tradeHistory: botState.tradeHistory,
             activeStrategy: botState.activeStrategy,
             isRunning: botState.isRunning,
-            DYNAMIC_CONFIG: DYNAMIC_CONFIG,
-            customToken: botState.customToken
+            DYNAMIC_CONFIG: DYNAMIC_CONFIG
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -295,29 +293,6 @@ app.post('/api/clear-history', (req, res) => {
     return res.json({ success: true, message: 'Estadísticas reiniciadas' });
 });
 
-app.post('/api/admin/token', (req, res) => {
-    const { password, token } = req.body;
-    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
-
-    // Si el token viene vacío, volvemos al de Railway
-    if (!token || token.trim() === "") {
-        botState.customToken = null;
-        saveState();
-        console.log('🔑 ADMIN: Token manual eliminado. Volviendo a Token de Railway...');
-    } else {
-        if (token.length < 10) return res.status(400).json({ success: false, error: 'Token muy corto' });
-        botState.customToken = token;
-        saveState();
-        console.log('🔑 ADMIN: Nuevo Token de Deriv configurado. Reconectando...');
-    }
-
-    if (ws) {
-        ws.terminate();
-    }
-
-    res.json({ success: true, message: token ? 'Token guardado. Reconectando...' : 'Volviendo a Token Railway...' });
-});
-
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
@@ -327,7 +302,7 @@ app.listen(PORT, () => console.log(`🌍 Módulo Web en puerto ${PORT}`));
 // NÚCLEO DEL BOT (DERIV)
 // ==========================================
 function connectDeriv() {
-    const activeToken = botState.customToken || process.env.DERIV_TOKEN;
+    const activeToken = process.env.DERIV_TOKEN;
 
     if (!activeToken) {
         console.error('❌ ERROR: No hay API Token configurado.');
@@ -338,7 +313,7 @@ function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log(`✅ Conectado a Deriv API ${botState.customToken ? '(Usando Token Manual)' : '(Usando Token Railway)'}`);
+        console.log('✅ Conectado a Deriv API (Usando Token de Railway)');
         ws.send(JSON.stringify({ authorize: activeToken }));
     });
 
