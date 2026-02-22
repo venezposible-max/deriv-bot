@@ -60,6 +60,7 @@ let botState = {
     currentContractType: null, // Tipo de contrato activo (MULTUP/MULTDOWN)
     lastTradeTime: null,
     cooldownRemaining: 0, // Segundos de enfriamiento restantes
+    customToken: null, // Token ingresado manualmente por el usuario
     tradeHistory: []
 };
 
@@ -69,6 +70,7 @@ if (fs.existsSync(STATE_FILE)) {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
         if (saved.DYNAMIC_CONFIG) DYNAMIC_CONFIG = { ...DYNAMIC_CONFIG, ...saved.DYNAMIC_CONFIG };
+        if (saved.customToken) botState.customToken = saved.customToken;
         if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
         console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
@@ -87,7 +89,8 @@ function saveState() {
             tradeHistory: botState.tradeHistory,
             activeStrategy: botState.activeStrategy,
             isRunning: botState.isRunning,
-            DYNAMIC_CONFIG: DYNAMIC_CONFIG
+            DYNAMIC_CONFIG: DYNAMIC_CONFIG,
+            customToken: botState.customToken
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -252,6 +255,27 @@ app.post('/api/clear-history', (req, res) => {
     return res.json({ success: true, message: 'Estadísticas reiniciadas' });
 });
 
+app.post('/api/admin/token', (req, res) => {
+    const { password, token } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+
+    if (!token || token.length < 10) {
+        return res.status(400).json({ success: false, error: 'Token inválido' });
+    }
+
+    botState.customToken = token;
+    saveState();
+
+    console.log('🔑 ADMIN: Nuevo Token de Deriv configurado. Reconectando...');
+
+    // Cerrar conexión actual para forzar reconexión con el nuevo token
+    if (ws) {
+        ws.terminate();
+    }
+
+    res.json({ success: true, message: 'Token guardado. Reconectando...' });
+});
+
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
@@ -261,10 +285,20 @@ app.listen(PORT, () => console.log(`🌍 Módulo Web en puerto ${PORT}`));
 // NÚCLEO DEL BOT (DERIV)
 // ==========================================
 function connectDeriv() {
-    if (!API_TOKEN) return;
+    const activeToken = botState.customToken || process.env.DERIV_TOKEN;
+
+    if (!activeToken) {
+        console.error('❌ ERROR: No hay API Token configurado.');
+        botState.isConnectedToDeriv = false;
+        return;
+    }
+
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
-    ws.on('open', () => ws.send(JSON.stringify({ authorize: API_TOKEN })));
+    ws.on('open', () => {
+        console.log(`✅ Conectado a Deriv API ${botState.customToken ? '(Usando Token Manual)' : '(Usando Token Railway)'}`);
+        ws.send(JSON.stringify({ authorize: activeToken }));
+    });
 
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
