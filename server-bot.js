@@ -259,21 +259,23 @@ app.post('/api/admin/token', (req, res) => {
     const { password, token } = req.body;
     if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
 
-    if (!token || token.length < 10) {
-        return res.status(400).json({ success: false, error: 'Token inválido' });
+    // Si el token viene vacío, volvemos al de Railway
+    if (!token || token.trim() === "") {
+        botState.customToken = null;
+        saveState();
+        console.log('🔑 ADMIN: Token manual eliminado. Volviendo a Token de Railway...');
+    } else {
+        if (token.length < 10) return res.status(400).json({ success: false, error: 'Token muy corto' });
+        botState.customToken = token;
+        saveState();
+        console.log('🔑 ADMIN: Nuevo Token de Deriv configurado. Reconectando...');
     }
 
-    botState.customToken = token;
-    saveState();
-
-    console.log('🔑 ADMIN: Nuevo Token de Deriv configurado. Reconectando...');
-
-    // Cerrar conexión actual para forzar reconexión con el nuevo token
     if (ws) {
         ws.terminate();
     }
 
-    res.json({ success: true, message: 'Token guardado. Reconectando...' });
+    res.json({ success: true, message: token ? 'Token guardado. Reconectando...' : 'Volviendo a Token Railway...' });
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
