@@ -179,6 +179,11 @@ app.post('/api/control', (req, res) => {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
         }
+
+        // Si solo estamos cambiando el símbolo sin otra acción, respondemos aquí
+        if (!action) {
+            return res.json({ success: true, message: `Mercado cambiado a ${targetSymbol === 'R_100' ? 'V100' : 'Oro'}` });
+        }
     }
 
     if (action === 'START') {
