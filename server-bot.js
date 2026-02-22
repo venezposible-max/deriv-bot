@@ -57,6 +57,7 @@ let botState = {
     lastSlAssigned: -12,
     activeContracts: [],
     activeProfit: 0,
+    currentContractType: null, // Tipo de contrato activo (MULTUP/MULTDOWN)
     lastTradeTime: null,
     cooldownRemaining: 0, // Segundos de enfriamiento restantes
     tradeHistory: []
@@ -401,6 +402,7 @@ function connectDeriv() {
 
                     if (contract.contract_id === botState.currentContractId) {
                         botState.activeProfit = currentProfit;
+                        botState.currentContractType = contract.contract_type;
 
                         // --- LÓGICA ASEGURADOR (SOLO SNIPER) ---
                         if (botState.activeStrategy === 'SNIPER') {
@@ -439,6 +441,7 @@ function connectDeriv() {
                 botState.activeContracts = botState.activeContracts.filter(ac => ac.id !== contract.contract_id);
                 if (botState.currentContractId === contract.contract_id) {
                     botState.currentContractId = botState.activeContracts.length > 0 ? botState.activeContracts[0].id : null;
+                    botState.currentContractType = null;
                     botState.activeProfit = 0;
                     botState.currentMaxProfit = 0;
                     botState.lastSlAssigned = -12;
