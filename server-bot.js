@@ -76,7 +76,9 @@ let botState = {
     tradeHistory: [],
     dailyLossLimit: 5.0, // 5% de pérdida máxima diaria
     startBalanceDay: 0,
-    isLockedByDrawdown: false
+    isLockedByDrawdown: false,
+    rsiValue: 50,
+    pm40Setup: { active: false, side: null }
 };
 
 // --- CARGAR ESTADO ---
@@ -113,24 +115,28 @@ function saveState() {
     }
 }
 
-// --- INDICADORES TÉCNICOS ---
+// --- CÁLCULOS TÉCNICOS ---
 function calculateSMA(prices, period) {
     if (prices.length < period) return null;
-    const sum = prices.slice(-period).reduce((a, b) => a + b, 0);
+    let sum = 0;
+    for (let i = 0; i < period; i++) {
+        sum += prices[prices.length - 1 - i];
+    }
     return sum / period;
 }
 
 function calculateRSI(prices, period = 14) {
-    if (prices.length < period + 1) return null;
-    let gains = 0, losses = 0;
-    const slice = prices.slice(-period - 1);
-    for (let i = 1; i < slice.length; i++) {
-        const diff = slice[i] - slice[i - 1];
-        if (diff > 0) gains += diff; else losses += Math.abs(diff);
+    if (prices.length < period + 1) return 50;
+    let gains = 0;
+    let losses = 0;
+    for (let i = prices.length - period; i < prices.length; i++) {
+        let diff = prices[i] - prices[i - 1];
+        if (diff >= 0) gains += diff; else losses -= diff;
     }
-    const avgLoss = losses / (period || 1);
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
     if (avgLoss === 0) return 100;
-    const rs = (gains / period) / avgLoss;
+    let rs = avgGain / avgLoss;
     return 100 - (100 / (1 + rs));
 }
 
@@ -140,7 +146,6 @@ let cooldownTime = 0;
 let tickHistory = [];
 let candleHistory = []; // Velas M1
 let candleHistoryH1 = []; // Velas H1 para filtro MTF
-let pm40Setup = { active: false, resistance: 0 };
 
 console.log('🚀 Iniciando Servidor Multi-Estrategia 24/7...');
 
@@ -426,7 +431,11 @@ function connectDeriv() {
             tickHistory.push(quote);
             if (tickHistory.length > 200) tickHistory.shift();
 
-            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
+            const now = new Date();
+            const hour = now.getUTCHours();
+            const isInsideSession = (hour >= 11 && hour <= 21); // Sesión expandida Londres/NY
+
+            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
 
                 const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : (botState.activeStrategy === 'PM40' ? PM40_CONFIG : DYNAMIC_CONFIG);
 
@@ -483,54 +492,66 @@ function connectDeriv() {
             }
             if (candleHistory.length > 100) candleHistory.shift();
 
-            // LÓGICA PM-40 OK + FILTRO PRO MTF
+            const closes = candleHistory.map(c => c.close);
+
+            // --- CÁLCULO RSI (Expert Filter) ---
+            if (closes.length >= 14) {
+                botState.rsiValue = calculateRSI(closes, 14);
+            }
+
+            // LÓGICA PM-40 BIDIRECCIONAL + FILTRO PRO MTF
             if (botState.isRunning && botState.activeStrategy === 'PM40' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
 
-                // --- FILTRO PROFESIONAL: ¿H1 está a favor? ---
-                let h1TrendOk = true;
+                const hour = new Date().getUTCHours();
+                if (hour < 11 || hour > 21) return; // Fuera de sesión profesional
+
+                let h1Trend = 'NEUTRAL';
                 if (candleHistoryH1.length >= 40) {
                     const closesH1 = candleHistoryH1.map(c => c.close);
                     const s20H1 = calculateSMA(closesH1, 20);
                     const s40H1 = calculateSMA(closesH1, 40);
-                    if (s20H1 && s40H1 && s20H1 < s40H1) {
-                        h1TrendOk = false; // Tendencia macro bajista, peligro comprar Call
+                    if (s20H1 && s40H1) {
+                        h1Trend = s20H1 > s40H1 ? 'UP' : 'DOWN';
                     }
                 }
 
-                if (!h1TrendOk) {
-                    if (pm40Setup.active) console.log("⏳ PM-40: Filtro H1 bloqueando entrada. Esperando tendencia macro alcista...");
-                    pm40Setup.active = false;
-                    return;
-                }
+                if (candleHistory.length >= 40) {
+                    const s20 = calculateSMA(closes, 20);
+                    const s40 = calculateSMA(closes, 40);
+                    const currentClose = candleHistory[candleHistory.length - 1].close;
+                    const currentHigh = candleHistory[candleHistory.length - 1].high;
+                    const currentLow = candleHistory[candleHistory.length - 1].low;
 
-                if (candleHistory.length >= PM40_CONFIG.sma40Period) {
-                    const closes = candleHistory.map(c => c.close);
-                    const s20 = calculateSMA(closes, PM40_CONFIG.sma20Period);
-                    const s40 = calculateSMA(closes, PM40_CONFIG.sma40Period);
-
-                    if (s20 && s40 && s20 > s40) {
-                        const lastCandle = candleHistory[candleHistory.length - 1];
-
-                        // 1. Pullback: Si toca o se acerca a la SMA 40
-                        if (lastCandle.low <= s40 * 1.0002) {
-                            pm40Setup.active = true;
-                            pm40Setup.resistance = lastCandle.high;
-                            console.log(`🎯 PM-40: Pullback detectado. Esperando ruptura de $${pm40Setup.resistance}...`);
+                    // --- LÓGICA CALL (COMPRA) ---
+                    if (h1Trend === 'UP' && s20 > s40) {
+                        if (currentLow <= s40 * 1.0002) {
+                            botState.pm40Setup.active = true;
+                            botState.pm40Setup.side = 'CALL';
+                            botState.pm40Setup.resistance = currentHigh;
                         }
-
-                        // 2. Disparo: Si rompe la resistencia
-                        if (pm40Setup.active) {
-                            if (lastCandle.close > pm40Setup.resistance) {
-                                console.log(`🚀 PM-40: ¡RUPTURA CONFIRMADA! Entrando en CALL.`);
-                                executeTrade('MULTUP');
-                                pm40Setup.active = false;
-                            } else {
-                                if (lastCandle.high < pm40Setup.resistance) pm40Setup.resistance = lastCandle.high;
-                                if (lastCandle.close < s40 * 0.998) pm40Setup.active = false;
-                            }
+                        if (botState.pm40Setup.active && botState.pm40Setup.side === 'CALL' && currentClose > botState.pm40Setup.resistance && botState.rsiValue < 70) {
+                            console.log(`🚀 [Expert Audit] Disparo CALL detectado: RSI ${botState.rsiValue.toFixed(1)}`);
+                            executeTrade('CALL', 1.00, 1.60); // TP/SL Optimizados por Auditoría
+                            botState.pm40Setup.active = false;
+                        } else if (botState.pm40Setup.active && botState.pm40Setup.side === 'CALL' && currentClose < s40) {
+                            botState.pm40Setup.active = false; // Invalidación
                         }
-                    } else {
-                        pm40Setup.active = false;
+                    }
+
+                    // --- LÓGICA PUT (VENTA) ---
+                    else if (h1Trend === 'DOWN' && s20 < s40) {
+                        if (currentHigh >= s40 * 0.9998) {
+                            botState.pm40Setup.active = true;
+                            botState.pm40Setup.side = 'PUT';
+                            botState.pm40Setup.support = currentLow;
+                        }
+                        if (botState.pm40Setup.active && botState.pm40Setup.side === 'PUT' && currentClose < botState.pm40Setup.support && botState.rsiValue > 30) {
+                            console.log(`📉 [Expert Audit] Disparo PUT detectado: RSI ${botState.rsiValue.toFixed(1)}`);
+                            executeTrade('PUT', 1.00, 1.60);
+                            botState.pm40Setup.active = false;
+                        } else if (botState.pm40Setup.active && botState.pm40Setup.side === 'PUT' && currentClose > s40) {
+                            botState.pm40Setup.active = false; // Invalidación
+                        }
                     }
                 }
             }
@@ -665,7 +686,7 @@ function sellContract(contractId) {
     setTimeout(() => { if (isBuying) isBuying = false; }, 3000);
 }
 
-function executeTrade(type) {
+function executeTrade(type, customTP = null, customSL = null) {
     if (isBuying) return;
     isBuying = true;
 
@@ -689,9 +710,18 @@ function executeTrade(type) {
         actualMult = DYNAMIC_CONFIG.multiplier;
     }
 
+    // Sobrescritura Pro (Resultados de la Auditoría Experta)
+    if (customTP) actualTP = customTP;
+    if (customSL) actualSL = customSL;
+
+    // Mapeo Binario -> Multiplicador
+    let contractType = type;
+    if (type === 'CALL') contractType = 'MULTUP';
+    if (type === 'PUT') contractType = 'MULTDOWN';
+
     const safeAmt = Math.max(1, actualStake);
 
-    console.log(`🚀 [${botState.activeStrategy}] Disparando: ${type} | Stake: $${safeAmt} | TP: $${actualTP} | SL: $${actualSL}`);
+    console.log(`🚀 [EXPERT DISPARO] ${type} (${contractType}) | Stake: $${safeAmt} | TP: $${actualTP} | SL: $${actualSL}`);
     const limitOrder = { take_profit: actualTP };
 
     if (actualSL) {
@@ -701,7 +731,7 @@ function executeTrade(type) {
     ws.send(JSON.stringify({
         buy: 1, price: safeAmt,
         parameters: {
-            amount: safeAmt, basis: "stake", contract_type: type, currency: "USD",
+            amount: safeAmt, basis: "stake", contract_type: contractType, currency: "USD",
             multiplier: actualMult, symbol: SYMBOL,
             limit_order: limitOrder
         }
