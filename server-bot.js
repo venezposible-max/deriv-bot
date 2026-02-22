@@ -73,7 +73,10 @@ let botState = {
     cooldownRemaining: 0, // Segundos de enfriamiento restantes
     customToken: null, // Token ingresado manualmente por el usuario
     connectionError: null, // Error de conexión actual
-    tradeHistory: []
+    tradeHistory: [],
+    dailyLossLimit: 5.0, // 5% de pérdida máxima diaria
+    startBalanceDay: 0,
+    isLockedByDrawdown: false
 };
 
 // --- CARGAR ESTADO ---
@@ -135,7 +138,8 @@ let ws;
 let isBuying = false;
 let cooldownTime = 0;
 let tickHistory = [];
-let candleHistory = [];
+let candleHistory = []; // Velas M1
+let candleHistoryH1 = []; // Velas H1 para filtro MTF
 let pm40Setup = { active: false, resistance: 0 };
 
 console.log('🚀 Iniciando Servidor Multi-Estrategia 24/7...');
@@ -200,7 +204,8 @@ app.post('/api/control', (req, res) => {
             ws.send(JSON.stringify({ forget_all: 'ohlc' }));
             ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
             if (botState.activeStrategy === 'PM40') {
-                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
+                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: 60, subscribe: 1 })); // M1
+                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: 3600, subscribe: 1 })); // H1 Filtro
             }
         }
 
@@ -421,7 +426,7 @@ function connectDeriv() {
             tickHistory.push(quote);
             if (tickHistory.length > 200) tickHistory.shift();
 
-            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying) {
+            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
 
                 const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : (botState.activeStrategy === 'PM40' ? PM40_CONFIG : DYNAMIC_CONFIG);
 
@@ -459,7 +464,18 @@ function connectDeriv() {
             const close = parseFloat(candle.close);
             const entry = { open, high, low, close, epoch: candle.epoch };
 
-            // Solo guardamos velas cerradas o actualizamos la última
+            if (candle.granularity === 3600) {
+                // MANEJO VELAS H1 (Filtro Profesional)
+                if (candleHistoryH1.length > 0 && candleHistoryH1[candleHistoryH1.length - 1].epoch === candle.epoch) {
+                    candleHistoryH1[candleHistoryH1.length - 1] = entry;
+                } else {
+                    candleHistoryH1.push(entry);
+                }
+                if (candleHistoryH1.length > 50) candleHistoryH1.shift();
+                return; // No procesar lógica de disparo con velas H1
+            }
+
+            // --- MANEJO VELAS M1 (Disparo) ---
             if (candleHistory.length > 0 && candleHistory[candleHistory.length - 1].epoch === candle.epoch) {
                 candleHistory[candleHistory.length - 1] = entry;
             } else {
@@ -467,8 +483,26 @@ function connectDeriv() {
             }
             if (candleHistory.length > 100) candleHistory.shift();
 
-            // LÓGICA PM-40 OK (Solo para GOLD o cuando se seleccione PM40)
-            if (botState.isRunning && botState.activeStrategy === 'PM40' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying) {
+            // LÓGICA PM-40 OK + FILTRO PRO MTF
+            if (botState.isRunning && botState.activeStrategy === 'PM40' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
+
+                // --- FILTRO PROFESIONAL: ¿H1 está a favor? ---
+                let h1TrendOk = true;
+                if (candleHistoryH1.length >= 40) {
+                    const closesH1 = candleHistoryH1.map(c => c.close);
+                    const s20H1 = calculateSMA(closesH1, 20);
+                    const s40H1 = calculateSMA(closesH1, 40);
+                    if (s20H1 && s40H1 && s20H1 < s40H1) {
+                        h1TrendOk = false; // Tendencia macro bajista, peligro comprar Call
+                    }
+                }
+
+                if (!h1TrendOk) {
+                    if (pm40Setup.active) console.log("⏳ PM-40: Filtro H1 bloqueando entrada. Esperando tendencia macro alcista...");
+                    pm40Setup.active = false;
+                    return;
+                }
+
                 if (candleHistory.length >= PM40_CONFIG.sma40Period) {
                     const closes = candleHistory.map(c => c.close);
                     const s20 = calculateSMA(closes, PM40_CONFIG.sma20Period);
@@ -568,6 +602,18 @@ function connectDeriv() {
                 }
                 botState.totalTradesSession++;
                 botState.pnlSession += profit;
+
+                // --- PROTECCIÓN DE DRAWDOWN DIARIO ---
+                if (!botState.startBalanceDay) botState.startBalanceDay = botState.balance + Math.abs(profit);
+                const currentLoss = botState.startBalanceDay - botState.balance;
+                const maxAllowedLoss = botState.startBalanceDay * (botState.dailyLossLimit / 100);
+
+                if (currentLoss >= maxAllowedLoss) {
+                    botState.isRunning = false;
+                    botState.isLockedByDrawdown = true;
+                    console.log(`🧨 PROTECCIÓN DE PÁNICO: Se ha perdido el ${botState.dailyLossLimit}%. Bot desactivado para proteger capital.`);
+                }
+
                 if (profit > 0) botState.winsSession++; else botState.lossesSession++;
                 isBuying = false;
                 ws.send(JSON.stringify({ balance: 1 }));
