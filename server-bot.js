@@ -264,11 +264,19 @@ function connectDeriv() {
 
             // --- AUTO-CLEAN GHOST TRADES ON ERROR ---
             const errMsg = msg.error.message.toLowerCase();
-            if (errMsg.includes('expired') || errMsg.includes('not found') || errMsg.includes('invalid contract')) {
+            if (errMsg.includes('expired') ||
+                errMsg.includes('not found') ||
+                errMsg.includes('invalid contract') ||
+                errMsg.includes('process your trade') ||
+                errMsg.includes('cannot be sold')) {
+
                 console.log('🧹 Limpiando trade fantasma detectado por error de Deriv...');
                 botState.currentContractId = null;
                 botState.activeContracts = [];
                 botState.activeProfit = 0;
+                botState.currentMaxProfit = 0;
+                botState.lastSlAssigned = -12;
+                saveState();
             }
             return;
         }
