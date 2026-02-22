@@ -451,7 +451,19 @@ function connectDeriv() {
                 if (profit > 0) botState.winsSession++; else botState.lossesSession++;
                 isBuying = false;
                 ws.send(JSON.stringify({ balance: 1 }));
-                botState.tradeHistory.unshift({ id: contract.contract_id, type: contract.contract_type, profit, timestamp: new Date().toLocaleTimeString() });
+                const durationSeconds = (contract.sell_time || Math.floor(Date.now() / 1000)) - contract.date_start;
+                const h = Math.floor(durationSeconds / 3600);
+                const m = Math.floor((durationSeconds % 3600) / 60);
+                const s = durationSeconds % 60;
+                const durationStr = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+
+                botState.tradeHistory.unshift({
+                    id: contract.contract_id,
+                    type: contract.contract_type,
+                    profit,
+                    timestamp: new Date().toLocaleTimeString(),
+                    duration: durationStr
+                });
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
                 saveState();
 

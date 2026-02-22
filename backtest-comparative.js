@@ -1,27 +1,17 @@
-```javascript
 const WebSocket = require('ws');
 
 // CONFIG
 const APP_ID = 1089;
-const SYMBOL = 'stpRNG';
-
-const DYNAMIC_CONFIG = {
-    stake: 0.1, // Mínimo para Step Index
-    takeProfit: 0.1,
-    multiplier: 1, // Step Index suele no usar multiplicador de la misma forma, pero Deriv API lo pide si es Multiplier contract
-    momentum: 7,
-    stopLoss: 0.5
-};
-
-const hours = 24;
-const totalNeeded = 30000;
+const SYMBOL = 'R_100'; // Volatilidad 100
+const hours = 0.25; // 15 minutos
+const totalNeeded = 1000;
 
 let allTicks = [];
 let lastEndTime = Math.floor(Date.now() / 1000);
 
 const OPTION_7 = { momentum: 7, takeProfit: 0.30, stopLoss: 3.00, stake: 10, multiplier: 40 };
 
-console.log(`🚀 Iniciando Backtest Comparativo(Últimas ${ hours }h) para ${ SYMBOL } `);
+console.log(`🚀 Iniciando Backtest Ultra-Rápido (Últimos 15 min) para ${SYMBOL}`);
 
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
@@ -47,31 +37,21 @@ ws.on('message', (data) => {
     }
 
     if (msg.msg_type === 'history') {
-        const prices = msg.history.prices;
-        const times = msg.history.times;
+        allTicks = msg.history.prices.concat(allTicks);
+        lastEndTime = msg.history.times[0] - 1;
 
-        allTicks = prices.concat(allTicks);
-        lastEndTime = times[0] - 1;
-
-        console.log(`📥 Cargando datos... (${allTicks.length} ticks recuperados)`);
-
-        if (allTicks.length < totalNeeded && prices.length > 0) {
+        if (allTicks.length < totalNeeded && msg.history.prices.length > 0) {
             fetchBatch();
         } else {
-            console.log(`\n✅ Datos cargados. Iniciando simulación...`);
-            runMultiSimulation(allTicks);
+            // Solo nos interesan los ultimos totalNeeded ticks (15 mins aprox)
+            const recentTicks = allTicks.slice(-totalNeeded);
+            runSimulation(recentTicks);
             ws.close();
         }
     }
 });
 
-function runMultiSimulation(ticks) {
-    console.log(`\n--- RESULTADOS CARGADOS (${ticks.length} ticks) ---`);
-
-    simulate("MOMENTUM 7 (Equilibrado)", OPTION_7, ticks);
-}
-
-function simulate(label, config, ticks) {
+function runSimulation(ticks) {
     let balance = 0;
     let wins = 0;
     let losses = 0;
@@ -79,12 +59,13 @@ function simulate(label, config, ticks) {
     let inTrade = false;
     let entryPrice = 0;
     let tradeType = null;
+    let cooldownUntil = 0;
 
-    for (let i = config.momentum; i < ticks.length; i++) {
+    for (let i = OPTION_7.momentum; i < ticks.length; i++) {
         const currentPrice = ticks[i];
 
-        if (!inTrade) {
-            const lastTicks = ticks.slice(i - config.momentum, i);
+        if (!inTrade && i >= cooldownUntil) {
+            const lastTicks = ticks.slice(i - OPTION_7.momentum, i);
             const allDown = lastTicks.every((v, idx) => idx === 0 || v < lastTicks[idx - 1]);
             const allUp = lastTicks.every((v, idx) => idx === 0 || v > lastTicks[idx - 1]);
 
@@ -97,32 +78,34 @@ function simulate(label, config, ticks) {
                 tradeType = 'MULTDOWN';
                 entryPrice = currentPrice;
             }
-        } else {
+        } else if (inTrade) {
             let priceChangePct = (currentPrice - entryPrice) / entryPrice;
             if (tradeType === 'MULTDOWN') priceChangePct = -priceChangePct;
 
-            const currentProfit = priceChangePct * config.multiplier * config.stake;
+            const currentProfit = priceChangePct * OPTION_7.multiplier * OPTION_7.stake;
 
-            if (currentProfit >= config.takeProfit) {
+            if (currentProfit >= OPTION_7.takeProfit) {
                 wins++;
                 totalTrades++;
-                balance += config.takeProfit;
+                balance += OPTION_7.takeProfit;
                 inTrade = false;
-                i += 30; // Cooldown
-            } else if (currentProfit <= -config.stopLoss) {
+                cooldownUntil = i + 60; // Enfriamiento de 60 ticks (aprox 1 min)
+            } else if (currentProfit <= -OPTION_7.stopLoss) {
                 losses++;
                 totalTrades++;
-                balance -= config.stopLoss;
+                balance -= OPTION_7.stopLoss;
                 inTrade = false;
-                i += 30; // Cooldown
+                cooldownUntil = i + 60; // Enfriamiento de 60 ticks
             }
         }
     }
 
-    console.log(`\n📊 ${label}`);
-    console.log(`Operaciones: ${totalTrades}`);
-    console.log(`Wins: ${wins} | Losses: ${losses}`);
+    console.log(`\n============== RESULTADOS 15 MIN (M7) ==============`);
+    console.log(`Ticks Analizados: ${ticks.length}`);
+    console.log(`Operaciones Totales: ${totalTrades}`);
+    console.log(`Victorias: ${wins} ✅`);
+    console.log(`Derrotas: ${losses} ❌`);
     console.log(`Win Rate: ${((wins / totalTrades) * 100 || 0).toFixed(1)}%`);
     console.log(`PnL Total: $${balance.toFixed(2)}`);
-    console.log(`-----------------------------------`);
+    console.log(`====================================================\n`);
 }
