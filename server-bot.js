@@ -264,7 +264,10 @@ app.post('/api/control', (req, res) => {
             if (req.body.momentum) GOLD_DYNAMIC_CONFIG.momentum = Number(req.body.momentum);
             GOLD_DYNAMIC_CONFIG.multiplier = 100; // SIEMPRE FORZADO PARA ORO
             actualStake = GOLD_DYNAMIC_CONFIG.stake;
-            if (req.body.useFilters !== undefined) GOLD_DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
+            if (req.body.useFilters !== undefined) {
+                GOLD_DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
+            }
+            console.log(`🎯 Filtros de Precisión GOLD: ${GOLD_DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS'}`);
         }
 
         if (botState.activeStrategy === 'DYNAMIC') {
@@ -503,32 +506,35 @@ function connectDeriv() {
                         if (allUp) direction = 'MULTDOWN';
 
                         // --- FILTROS DE PRECISIÓN (ATR + Tick Density) ---
-                        // Solo aplica en modo DYNAMIC o GOLD_DYNAMIC cuando está activado desde la UI
                         const activeFilters = botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG.useFilters : DYNAMIC_CONFIG.useFilters;
 
-                        if (direction && activeFilters && candleHistory.length >= 15) {
-                            // Filtro 1: ATR - la vela actual debe tener un rango mayor que el promedio
-                            const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
-                            const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
-                            const latestCandle = candleHistory[candleHistory.length - 1];
-                            const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
-                            const atrPass = currentRange >= atr * 1.2;
-
-                            // Filtro 2: Densidad de Ticks (Body Ratio de la última vela)
-                            const candleBody = latestCandle ? Math.abs(latestCandle.close - latestCandle.open) : 0;
-                            const bodyRatio = currentRange > 0 ? candleBody / currentRange : 0;
-                            const pastBodyRatios = candleHistory.slice(-10).map(c => {
-                                const r = c.high - c.low;
-                                return r > 0 ? Math.abs(c.close - c.open) / r : 0;
-                            });
-                            const avgBodyRatio = pastBodyRatios.reduce((a, b) => a + b, 0) / pastBodyRatios.length;
-                            const tickPass = bodyRatio >= 0.55 && bodyRatio >= avgBodyRatio * 1.1;
-
-                            if (!atrPass || !tickPass) {
-                                console.log(`🚫 FILTRO: Señal ${direction === 'MULTUP' ? 'CALL' : 'PUT'} rechazada | ATR: ${atrPass ? '✅' : '❌'} | Tick: ${tickPass ? '✅' : '❌'}`);
-                                direction = null; // Señal rechazada por filtros
+                        if (direction && activeFilters) {
+                            if (candleHistory.length < 15) {
+                                console.log(`⚠️ FILTRO SKIPPED: Esperando más velas (${candleHistory.length}/15)...`);
                             } else {
-                                console.log(`✅ FILTRO: Señal aprobada | ATR: ✅ | Tick: ✅ → Disparando trade`);
+                                // Filtro 1: ATR - la vela actual debe tener un rango mayor que el promedio
+                                const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
+                                const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+                                const latestCandle = candleHistory[candleHistory.length - 1];
+                                const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
+                                const atrPass = currentRange >= atr * 1.2;
+
+                                // Filtro 2: Densidad de Ticks (Body Ratio de la última vela)
+                                const candleBody = latestCandle ? Math.abs(latestCandle.close - latestCandle.open) : 0;
+                                const bodyRatio = currentRange > 0 ? candleBody / currentRange : 0;
+                                const pastBodyRatios = candleHistory.slice(-10).map(c => {
+                                    const r = c.high - c.low;
+                                    return r > 0 ? Math.abs(c.close - c.open) / r : 0;
+                                });
+                                const avgBodyRatio = pastBodyRatios.reduce((a, b) => a + b, 0) / pastBodyRatios.length;
+                                const tickPass = bodyRatio >= 0.55 && bodyRatio >= avgBodyRatio * 1.1;
+
+                                if (!atrPass || !tickPass) {
+                                    console.log(`🚫 FILTRO [${botState.activeStrategy}]: Señal ${direction === 'MULTUP' ? 'CALL' : 'PUT'} rechazada | ATR: ${atrPass ? '✅' : '❌'} | Tick: ${tickPass ? '✅' : '❌'}`);
+                                    direction = null;
+                                } else {
+                                    console.log(`✅ FILTRO [${botState.activeStrategy}]: Señal aprobada | ATR: ✅ | Tick: ✅ → Disparando trade`);
+                                }
                             }
                         }
                     }
@@ -538,8 +544,26 @@ function connectDeriv() {
             }
         }
 
+        // --- MANEJO DE HISTORIAL DE VELAS ---
+        if (msg.msg_type === 'history' || msg.msg_type === 'candles') {
+            const sym = msg.echo_req.ticks_history;
+            if (sym !== SYMBOL) return;
+
+            const candles = msg.candles || (msg.history ? msg.history.times.map((t, i) => ({
+                epoch: t,
+                open: msg.history.prices[i],
+                high: msg.history.prices[i],
+                low: msg.history.prices[i],
+                close: msg.history.prices[i]
+            })) : []);
+
+            candleHistory = candles;
+            console.log(`📊 Velas cargadas [${SYMBOL}]: ${candleHistory.length}`);
+        }
+
         if (msg.msg_type === 'ohlc') {
             const candle = msg.ohlc;
+            if (candle.symbol !== SYMBOL) return; // VERIFICACIÓN DE SÍMBOLO CRÍTICA
             const open = parseFloat(candle.open);
             const high = parseFloat(candle.high);
             const low = parseFloat(candle.low);
@@ -554,16 +578,16 @@ function connectDeriv() {
                     candleHistoryH1.push(entry);
                 }
                 if (candleHistoryH1.length > 50) candleHistoryH1.shift();
-                return; // No procesar lógica de disparo con velas H1
+                return;
             }
 
-            // --- MANEJO VELAS M1 (Disparo) ---
+            // --- MANEJO VELAS M1 (Disparo + Filtros) ---
             if (candleHistory.length > 0 && candleHistory[candleHistory.length - 1].epoch === candle.epoch) {
                 candleHistory[candleHistory.length - 1] = entry;
             } else {
                 candleHistory.push(entry);
+                if (candleHistory.length > 100) candleHistory.shift();
             }
-            if (candleHistory.length > 100) candleHistory.shift();
 
             const closes = candleHistory.map(c => c.close);
 
