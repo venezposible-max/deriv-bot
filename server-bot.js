@@ -17,7 +17,8 @@ let DYNAMIC_CONFIG = {
     takeProfit: 0.30,
     multiplier: 40,
     momentum: 5,
-    stopLoss: 3.00
+    stopLoss: 3.00,
+    useFilters: false  // Filtros de Precisión ATR + Densidad de Ticks
 };
 
 // --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
@@ -239,6 +240,11 @@ app.post('/api/control', (req, res) => {
                 const slVal = Number(req.body.stopLoss);
                 DYNAMIC_CONFIG.stopLoss = slVal > 0 ? slVal : null;
             }
+            // Guardar preferencia de Filtros de Precisión
+            if (req.body.useFilters !== undefined) {
+                DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
+                console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS (Velocidad Máxima)'}`);
+            }
         }
 
         console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} | Stake Real: $${actualStake}`);
@@ -441,6 +447,31 @@ function connectDeriv() {
                         // --- LÓGICA DINÁMICA ---
                         if (allDown) direction = 'MULTUP';
                         if (allUp) direction = 'MULTDOWN';
+
+                        // --- FILTROS DE PRECISIÓN (ATR + Tick Density) ---
+                        // Solo aplica en modo DYNAMIC cuando está activado desde la UI
+                        if (direction && DYNAMIC_CONFIG.useFilters && candleHistory.length >= 15) {
+                            // Filtro 1: ATR - la vela actual debe tener un rango mayor que el promedio
+                            const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
+                            const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+                            const latestCandle = candleHistory[candleHistory.length - 1];
+                            const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
+                            const atrPass = currentRange >= atr * 1.2;
+
+                            // Filtro 2: Densidad de Ticks (Body Ratio de la última vela)
+                            const candleBody = latestCandle ? Math.abs(latestCandle.close - latestCandle.open) : 0;
+                            const bodyRatio = currentRange > 0 ? candleBody / currentRange : 0;
+                            const pastBodyRatios = candleHistory.slice(-10).map(c => {
+                                const r = c.high - c.low;
+                                return r > 0 ? Math.abs(c.close - c.open) / r : 0;
+                            });
+                            const avgBodyRatio = pastBodyRatios.reduce((a, b) => a + b, 0) / pastBodyRatios.length;
+                            const tickPass = bodyRatio >= 0.55 && bodyRatio >= avgBodyRatio * 1.1;
+
+                            if (!atrPass || !tickPass) {
+                                direction = null; // Señal rechazada por filtros
+                            }
+                        }
                     }
 
                     if (direction) executeTrade(direction);
