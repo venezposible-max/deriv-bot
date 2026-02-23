@@ -510,7 +510,8 @@ function connectDeriv() {
 
                         if (direction && activeFilters) {
                             if (candleHistory.length < 15) {
-                                console.log(`⚠️ FILTRO SKIPPED: Esperando más velas (${candleHistory.length}/15)...`);
+                                console.log(`⏳ FILTRO BLOQUEADO [${botState.activeStrategy}]: Calibrando sensores... (${candleHistory.length}/15 velas)`);
+                                direction = null; // SEGURIDAD: Bloquear disparo hasta tener historial completo
                             } else {
                                 // Filtro 1: ATR - la vela actual debe tener un rango mayor que el promedio
                                 const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
