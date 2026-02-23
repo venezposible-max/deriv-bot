@@ -45,6 +45,15 @@ const PM40_CONFIG = {
     granularity: 60 // 1 minuto
 };
 
+// --- PARÁMETROS GOLD DYNAMIC (Momentum en ticks aplicado al Oro) ---
+const GOLD_DYNAMIC_CONFIG = {
+    stake: 10,
+    takeProfit: 2.00,  // Config campeona del backtesting Enero 2026
+    stopLoss: 3.00,
+    multiplier: 100,   // FIJO — único válido para frxXAUUSD en Multiplier
+    momentum: 5        // 5 ticks consecutivos en la misma dirección
+};
+
 // Auth y Variables
 const API_TOKEN = process.env.DERIV_TOKEN;
 const WEB_PASSWORD = process.env.WEB_PASSWORD || "colina123";
@@ -157,10 +166,15 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
+    let activeConfig = SNIPER_CONFIG;
+    if (botState.activeStrategy === 'DYNAMIC') activeConfig = DYNAMIC_CONFIG;
+    else if (botState.activeStrategy === 'GOLD_DYNAMIC') activeConfig = GOLD_DYNAMIC_CONFIG;
+    else if (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') activeConfig = PM40_CONFIG;
+
     res.json({
         success: true,
         data: botState,
-        config: botState.activeStrategy === 'DYNAMIC' ? DYNAMIC_CONFIG : SNIPER_CONFIG,
+        config: activeConfig,
         isSniper: botState.activeStrategy === 'SNIPER'
     });
 });
@@ -171,10 +185,11 @@ app.post('/api/filters', (req, res) => {
     if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     if (useFilters === undefined) return res.status(400).json({ success: false, error: 'Falta parámetro useFilters' });
 
-    DYNAMIC_CONFIG.useFilters = Boolean(useFilters);
+    if (botState.activeStrategy === 'GOLD_DYNAMIC') GOLD_DYNAMIC_CONFIG.useFilters = Boolean(useFilters);
+    else DYNAMIC_CONFIG.useFilters = Boolean(useFilters);
+
     saveState();
-    console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS (Velocidad Máxima)'}`);
-    return res.json({ success: true, useFilters: DYNAMIC_CONFIG.useFilters, message: `Filtros ${DYNAMIC_CONFIG.useFilters ? 'activados' : 'desactivados'}` });
+    return res.json({ success: true, useFilters: Boolean(useFilters), message: `Filtros actualizados` });
 });
 
 app.post('/api/control', (req, res) => {
@@ -185,7 +200,7 @@ app.post('/api/control', (req, res) => {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
-    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER' || strategy === 'GOLD_MASTER' || strategy === 'PM40')) {
+    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER' || strategy === 'GOLD_MASTER' || strategy === 'PM40' || strategy === 'GOLD_DYNAMIC')) {
         if (botState.isRunning && botState.activeStrategy !== strategy) {
             console.log(`⚠️ INTENTO DE CAMBIO BLOQUEADO: No se puede cambiar a ${strategy} mientras ${botState.activeStrategy} está en ejecución.`);
             return res.status(400).json({ success: false, error: `El bot ya está corriendo en modo ${botState.activeStrategy}. Deténlo para cambiar.` });
@@ -240,6 +255,16 @@ app.post('/api/control', (req, res) => {
         saveState();
 
         let actualStake = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG.stake : (stake || DYNAMIC_CONFIG.stake);
+
+        if (botState.activeStrategy === 'GOLD_DYNAMIC') {
+            if (stake) GOLD_DYNAMIC_CONFIG.stake = Number(stake);
+            if (takeProfit) GOLD_DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
+            if (req.body.stopLoss !== undefined) GOLD_DYNAMIC_CONFIG.stopLoss = Number(req.body.stopLoss) || 3.00;
+            if (req.body.momentum) GOLD_DYNAMIC_CONFIG.momentum = Number(req.body.momentum);
+            GOLD_DYNAMIC_CONFIG.multiplier = 100; // SIEMPRE FORZADO PARA ORO
+            actualStake = GOLD_DYNAMIC_CONFIG.stake;
+            if (req.body.useFilters !== undefined) GOLD_DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
+        }
 
         if (botState.activeStrategy === 'DYNAMIC') {
             if (stake) DYNAMIC_CONFIG.stake = Number(stake);
@@ -452,7 +477,9 @@ function connectDeriv() {
 
             if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
 
-                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : ((botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') ? PM40_CONFIG : DYNAMIC_CONFIG);
+                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG :
+                    (botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG :
+                        ((botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') ? PM40_CONFIG : DYNAMIC_CONFIG));
 
                 if (botState.activeStrategy !== 'PM40' && botState.activeStrategy !== 'GOLD_MASTER' && tickHistory.length >= currentConfig.momentum) {
                     const lastTicks = tickHistory.slice(-currentConfig.momentum);
@@ -475,8 +502,10 @@ function connectDeriv() {
                         if (allUp) direction = 'MULTDOWN';
 
                         // --- FILTROS DE PRECISIÓN (ATR + Tick Density) ---
-                        // Solo aplica en modo DYNAMIC cuando está activado desde la UI
-                        if (direction && DYNAMIC_CONFIG.useFilters && candleHistory.length >= 15) {
+                        // Solo aplica en modo DYNAMIC o GOLD_DYNAMIC cuando está activado desde la UI
+                        const activeFilters = botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG.useFilters : DYNAMIC_CONFIG.useFilters;
+
+                        if (direction && activeFilters && candleHistory.length >= 15) {
                             // Filtro 1: ATR - la vela actual debe tener un rango mayor que el promedio
                             const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
                             const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
@@ -495,8 +524,8 @@ function connectDeriv() {
                             const tickPass = bodyRatio >= 0.55 && bodyRatio >= avgBodyRatio * 1.1;
 
                             if (!atrPass || !tickPass) {
-                                direction = null; // Señal rechazada por filtros
                                 console.log(`🚫 FILTRO: Señal ${direction === 'MULTUP' ? 'CALL' : 'PUT'} rechazada | ATR: ${atrPass ? '✅' : '❌'} | Tick: ${tickPass ? '✅' : '❌'}`);
+                                direction = null; // Señal rechazada por filtros
                             } else {
                                 console.log(`✅ FILTRO: Señal aprobada | ATR: ✅ | Tick: ✅ → Disparando trade`);
                             }
