@@ -770,6 +770,11 @@ function executeTrade(type, customTP = null, customSL = null) {
         actualTP = SNIPER_CONFIG.takeProfit;
         actualSL = SNIPER_CONFIG.stopLoss;
         actualMult = SNIPER_CONFIG.multiplier;
+    } else if (botState.activeStrategy === 'GOLD_DYNAMIC') {
+        actualStake = GOLD_DYNAMIC_CONFIG.stake;
+        actualTP = GOLD_DYNAMIC_CONFIG.takeProfit;
+        actualSL = GOLD_DYNAMIC_CONFIG.stopLoss;
+        actualMult = GOLD_DYNAMIC_CONFIG.multiplier;
     } else if (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') {
         actualStake = PM40_CONFIG.stake;
         actualTP = PM40_CONFIG.takeProfit;
