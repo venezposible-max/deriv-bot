@@ -165,6 +165,18 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+// --- ENDPOINT: TOGGLE FILTROS EN TIEMPO REAL ---
+app.post('/api/filters', (req, res) => {
+    const { password, useFilters } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    if (useFilters === undefined) return res.status(400).json({ success: false, error: 'Falta parámetro useFilters' });
+
+    DYNAMIC_CONFIG.useFilters = Boolean(useFilters);
+    saveState();
+    console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS (Velocidad Máxima)'}`);
+    return res.json({ success: true, useFilters: DYNAMIC_CONFIG.useFilters, message: `Filtros ${DYNAMIC_CONFIG.useFilters ? 'activados' : 'desactivados'}` });
+});
+
 app.post('/api/control', (req, res) => {
     const { action, password, stake, takeProfit, multiplier, strategy } = req.body;
     console.log(`📩 RECIBIDO EN SERVIDOR: Acción=${action} | Estrategia=${strategy} | Stake=${stake}`);
