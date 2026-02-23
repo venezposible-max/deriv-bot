@@ -51,7 +51,8 @@ const GOLD_DYNAMIC_CONFIG = {
     takeProfit: 2.00,  // Config campeona del backtesting Enero 2026
     stopLoss: 3.00,
     multiplier: 100,   // FIJO — único válido para frxXAUUSD en Multiplier
-    momentum: 5        // 5 ticks consecutivos en la misma dirección
+    momentum: 5,        // 5 ticks consecutivos en la misma dirección
+    useFilters: true   // ✅ Filtros de precisión activados por defecto
 };
 
 // Auth y Variables
