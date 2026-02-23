@@ -237,10 +237,9 @@ app.post('/api/control', (req, res) => {
             setTimeout(() => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-                    if (botState.activeStrategy === 'GOLD_MASTER' || botState.activeStrategy === 'PM40') {
-                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
-                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
-                    }
+                    // Siempre pedir historial de velas para que los filtros de precisión funcionen al instante
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                 }
             }, 400);
         }
@@ -413,10 +412,9 @@ function connectDeriv() {
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-                    if (botState.activeStrategy === 'GOLD_MASTER' || botState.activeStrategy === 'PM40') {
-                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
-                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
-                    }
+                    // Siempre pedir historial de velas para filtros de precisión inmediatos
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
                 }
