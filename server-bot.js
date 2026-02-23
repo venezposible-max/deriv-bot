@@ -217,7 +217,7 @@ app.post('/api/control', (req, res) => {
         // Re-suscribirse limpiamente al nuevo símbolo
         if (ws && botState.isConnectedToDeriv) {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
-            ws.send(JSON.stringify({ forget_all: 'ohlc' }));
+            ws.send(JSON.stringify({ forget_all: 'candles' })); // ✅ 'candles' es el tipo correcto para OHLC en Deriv API
             setTimeout(() => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
@@ -380,7 +380,7 @@ function connectDeriv() {
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             // Limpiar suscripciones anteriores antes de crear nuevas
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
-            ws.send(JSON.stringify({ forget_all: 'ohlc' }));
+            ws.send(JSON.stringify({ forget_all: 'candles' })); // ✅ 'candles' es el tipo correcto para OHLC en Deriv API
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
