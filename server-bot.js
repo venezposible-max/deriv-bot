@@ -214,21 +214,19 @@ app.post('/api/control', (req, res) => {
         saveState();
         console.log(`🌍 MERCADO CAMBIADO A: ${SYMBOL === 'R_100' ? 'Volatility 100' : 'Oro (Gold)'}`);
 
-        // Re-suscribirse a los ticks si ya estamos conectados
+        // Re-suscribirse limpiamente al nuevo símbolo
         if (ws && botState.isConnectedToDeriv) {
-            // API Deriv format for forget_all: {"forget_all": ["ticks", "candles"]} or similar
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
-            ws.send(JSON.stringify({ forget_all: 'candles' })); // It is 'candles', not 'ohlc' for the forget_all array
-
+            ws.send(JSON.stringify({ forget_all: 'ohlc' }));
             setTimeout(() => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     if (botState.activeStrategy === 'GOLD_MASTER' || botState.activeStrategy === 'PM40') {
-                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 })); // M1
-                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 })); // H1 Filtro
+                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
+                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                     }
                 }
-            }, 500); // Dar tiempo a que el servidor de Deriv limpie las deltes antes de resuscribir
+            }, 400);
         }
 
         // Si solo estamos cambiando el símbolo sin otra acción, respondemos aquí
@@ -347,12 +345,17 @@ function connectDeriv() {
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
         if (msg.error) {
-            console.error(`⚠️ Error: ${msg.error.message}`);
-            botState.connectionError = msg.error.message;
+            const errMsg = (msg.error.message || '').toLowerCase();
+            // Ignorar errores de suscripción duplicada — son parte normal del ciclo de re-suscripción
+            const isBenign = errMsg.includes('already subscribed') ||
+                errMsg.includes('unrecognised request');
+            if (!isBenign) {
+                console.error(`⚠️ Error: ${msg.error.message}`);
+            }
+            botState.connectionError = isBenign ? null : msg.error.message;
             isBuying = false;
 
             // --- AUTO-CLEAN GHOST TRADES ON ERROR ---
-            const errMsg = msg.error.message.toLowerCase();
             if (errMsg.includes('expired') ||
                 errMsg.includes('not found') ||
                 errMsg.includes('invalid contract') ||
@@ -375,12 +378,20 @@ function connectDeriv() {
             botState.connectionError = null;
             botState.balance = msg.authorize.balance;
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
-            ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-            if (botState.activeStrategy === 'PM40') {
-                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
-            }
-            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-            ws.send(JSON.stringify({ portfolio: 1 }));
+            // Limpiar suscripciones anteriores antes de crear nuevas
+            ws.send(JSON.stringify({ forget_all: 'ticks' }));
+            ws.send(JSON.stringify({ forget_all: 'ohlc' }));
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
+                    if (botState.activeStrategy === 'GOLD_MASTER' || botState.activeStrategy === 'PM40') {
+                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
+                        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
+                    }
+                    ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                    ws.send(JSON.stringify({ portfolio: 1 }));
+                }
+            }, 300);
 
             // --- SYNC PERIODICO (Evitar Fantasmas) ---
             if (global.syncTimer) clearInterval(global.syncTimer);
