@@ -414,13 +414,15 @@ function connectDeriv() {
 
             const now = new Date();
             const hour = now.getUTCHours();
-            const isInsideSession = (hour >= 11 && hour <= 21); // Sesión expandida Londres/NY
+
+            // Evaluamos la sesión solo para ORO, el Volatility 100 es 24/7.
+            const isInsideSession = (SYMBOL === 'frxXAUUSD') ? (hour >= 11 && hour <= 21) : true;
 
             if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
 
-                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : (botState.activeStrategy === 'PM40' ? PM40_CONFIG : DYNAMIC_CONFIG);
+                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG : ((botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') ? PM40_CONFIG : DYNAMIC_CONFIG);
 
-                if (botState.activeStrategy !== 'PM40' && tickHistory.length >= currentConfig.momentum) {
+                if (botState.activeStrategy !== 'PM40' && botState.activeStrategy !== 'GOLD_MASTER' && tickHistory.length >= currentConfig.momentum) {
                     const lastTicks = tickHistory.slice(-currentConfig.momentum);
                     const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
                     const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
