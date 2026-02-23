@@ -26,12 +26,12 @@ const SNIPER_CONFIG = {
     stake: 20,
     takeProfit: 4.00,
     stopLoss: 12.00, // Protección Blindada
-    multiplier: 40,
+    multiplier: 100, // ✅ Mínimo válido para Gold en Deriv (x100, x200, x300, x500, x800)
     smaPeriod: 50,
     rsiPeriod: 14,
-    rsiLow: 30, // Filtro de zona para UP
-    rsiHigh: 70, // Filtro de zona para DOWN
-    momentum: 5   // 5 Ticks de confirmación
+    rsiLow: 30,
+    rsiHigh: 70,
+    momentum: 5
 };
 
 // --- PARÁMETROS PM-40 OK (PROFESIONAL ORO) ---
@@ -39,7 +39,7 @@ const PM40_CONFIG = {
     stake: 10,
     takeProfit: 1.00,
     stopLoss: 2.00,
-    multiplier: 40,
+    multiplier: 100, // ✅ Mínimo válido para Gold en Deriv (x100, x200, x300, x500, x800)
     sma20Period: 20,
     sma40Period: 40,
     granularity: 60 // 1 minuto
