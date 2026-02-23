@@ -260,6 +260,9 @@ app.post('/api/control', (req, res) => {
         }
 
         console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} | Stake Real: $${actualStake}`);
+        if (botState.activeStrategy === 'DYNAMIC') {
+            console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? '✅ ACTIVADOS (ATR + Tick Density)' : '⏸️  DESACTIVADOS (Velocidad Máxima)'}`);
+        }
         return res.json({ success: true, message: `Bot ${botState.activeStrategy} Activado`, isRunning: true });
     }
 
@@ -482,6 +485,9 @@ function connectDeriv() {
 
                             if (!atrPass || !tickPass) {
                                 direction = null; // Señal rechazada por filtros
+                                console.log(`🚫 FILTRO: Señal ${direction === 'MULTUP' ? 'CALL' : 'PUT'} rechazada | ATR: ${atrPass ? '✅' : '❌'} | Tick: ${tickPass ? '✅' : '❌'}`);
+                            } else {
+                                console.log(`✅ FILTRO: Señal aprobada | ATR: ✅ | Tick: ✅ → Disparando trade`);
                             }
                         }
                     }
