@@ -492,7 +492,11 @@ function connectDeriv() {
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             // Limpiar suscripciones anteriores antes de crear nuevas
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
-            ws.send(JSON.stringify({ forget_all: 'candles' })); // ✅ 'candles' es el tipo correcto para OHLC en Deriv API
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ forget_all: 'candles' }));
+                }
+            }, 100);
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
