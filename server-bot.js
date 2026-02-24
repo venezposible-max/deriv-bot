@@ -571,6 +571,40 @@ function connectDeriv() {
             tickHistory.push(quote);
             if (tickHistory.length > 200) tickHistory.shift();
 
+            // --- MONITOR ULTRA-RÁPIDO DE TRADES ACTIVOS (TICK-BY-TICK) ---
+            if (botState.currentContractId && botState.isRunning) {
+                const activeContract = botState.activeContracts.find(c => c.id === botState.currentContractId);
+                if (activeContract && activeContract.entryPrice) {
+                    let priceChangePct = (quote - activeContract.entryPrice) / activeContract.entryPrice;
+                    if (activeContract.type === 'MULTDOWN' || activeContract.type === 'PUT') priceChangePct = -priceChangePct;
+                    const liveProfit = priceChangePct * activeContract.multiplier * activeContract.stake;
+
+                    // Actualizar estado para la UI (Rapidez visual)
+                    botState.activeProfit = liveProfit;
+
+                    if (botState.activeStrategy === 'SNIPER') {
+                        // Actualizar Max Profit Real-Time
+                        if (liveProfit > botState.currentMaxProfit) botState.currentMaxProfit = liveProfit;
+
+                        // Niveles de Trailing Ultra-Agresivos
+                        if (botState.currentMaxProfit >= 9.00 && botState.lastSlAssigned < 8.50) botState.lastSlAssigned = 8.50;
+                        else if (botState.currentMaxProfit >= 7.00 && botState.lastSlAssigned < 6.00) botState.lastSlAssigned = 6.00;
+                        else if (botState.currentMaxProfit >= 5.00 && botState.lastSlAssigned < 4.00) botState.lastSlAssigned = 4.00;
+                        else if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.50) botState.lastSlAssigned = 2.50;
+                        else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.50) botState.lastSlAssigned = 1.50;
+                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.70) botState.lastSlAssigned = 0.70;
+                        else if (botState.currentMaxProfit >= 0.60 && botState.lastSlAssigned < 0.40) botState.lastSlAssigned = 0.40;
+                        else if (botState.currentMaxProfit >= 0.40 && botState.lastSlAssigned < 0.30) botState.lastSlAssigned = 0.30;
+
+                        // Ejecutar Cierre Inmediato (Sin esperar al segundo de Deriv)
+                        if (botState.lastSlAssigned > 0 && liveProfit <= botState.lastSlAssigned) {
+                            console.log(`⚡ [ULTRA-FAST] Trailing Activado: Venta en $${liveProfit.toFixed(2)} | Piso: $${botState.lastSlAssigned.toFixed(2)}`);
+                            sellContract(botState.currentContractId);
+                        }
+                    }
+                }
+            }
+
             const nowDate = new Date();
             const hour = nowDate.getUTCHours();
 
@@ -807,6 +841,14 @@ function connectDeriv() {
                 if (idx !== -1) {
                     const currentProfit = parseFloat(contract.profit || 0);
                     botState.activeContracts[idx].profit = currentProfit;
+
+                    // ✅ GUARDAR DATOS PARA MONITORIZACIÓN ULTRA-RÁPIDA (TICK-BY-TICK)
+                    if (!botState.activeContracts[idx].entryPrice && contract.entry_tick) {
+                        botState.activeContracts[idx].entryPrice = parseFloat(contract.entry_tick);
+                        botState.activeContracts[idx].type = contract.contract_type;
+                        botState.activeContracts[idx].stake = parseFloat(contract.buy_price);
+                        botState.activeContracts[idx].multiplier = contract.multiplier;
+                    }
 
                     if (contract.contract_id === botState.currentContractId) {
                         botState.activeProfit = currentProfit;
