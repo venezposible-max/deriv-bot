@@ -457,6 +457,8 @@ function connectDeriv() {
                 if (botState.activeContracts.length === 0) {
                     botState.currentContractId = null;
                     botState.activeProfit = 0;
+                    botState.currentMaxProfit = 0;   // RESET CRÍTICO
+                    botState.lastSlAssigned = -12;   // RESET CRÍTICO
                 } else if (!derivIds.includes(botState.currentContractId)) {
                     botState.currentContractId = botState.activeContracts[0].id;
                 }
@@ -673,6 +675,8 @@ function connectDeriv() {
             const newId = msg.buy.contract_id;
             botState.activeContracts.push({ id: newId, profit: 0 });
             botState.currentContractId = newId;
+            botState.currentMaxProfit = 0;   // RESET AL COMPRAR
+            botState.lastSlAssigned = -12;   // RESET AL COMPRAR
             botState.balance = msg.buy.balance_after;
             botState.lastTradeTime = new Date().toISOString();
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: newId, subscribe: 1 }));
