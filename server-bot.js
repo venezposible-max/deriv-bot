@@ -18,7 +18,8 @@ let DYNAMIC_CONFIG = {
     multiplier: 40,
     momentum: 5,
     stopLoss: 3.00,
-    useFilters: false  // Filtros de Precisión ATR + Densidad de Ticks
+    useFilters: false,  // Filtros de Precisión ATR + Densidad de Ticks
+    useAcceleration: false // Filtro de Aceleración HFT
 };
 
 // --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
@@ -52,7 +53,8 @@ const GOLD_DYNAMIC_CONFIG = {
     stopLoss: 3.00,
     multiplier: 100,   // FIJO — único válido para frxXAUUSD en Multiplier
     momentum: 5,        // 5 ticks consecutivos en la misma dirección
-    useFilters: true   // ✅ Filtros de precisión activados por defecto
+    useFilters: true,   // ✅ Filtros de precisión activados por defecto
+    useAcceleration: false // Filtro de Aceleración HFT
 };
 
 // Auth y Variables
@@ -91,7 +93,8 @@ let botState = {
     rsiValue: 50,
     pm40Setup: { active: false, side: null },
     sessionDuration: 0, // Segundos acumulados en el aire
-    lastTickUpdate: Date.now()
+    lastTickUpdate: Date.now(),
+    tickIntervals: [] // Milisegundos entre ticks
 };
 
 // --- CARGAR ESTADO ---
@@ -205,6 +208,18 @@ app.post('/api/filters', (req, res) => {
     return res.json({ success: true, useFilters: Boolean(useFilters), message: `Filtros actualizados` });
 });
 
+// --- ENDPOINT: TOGGLE ACELERACIÓN ---
+app.post('/api/acceleration', (req, res) => {
+    const { password, useAcceleration } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+
+    if (botState.activeStrategy === 'GOLD_DYNAMIC') GOLD_DYNAMIC_CONFIG.useAcceleration = Boolean(useAcceleration);
+    else DYNAMIC_CONFIG.useAcceleration = Boolean(useAcceleration);
+
+    saveState();
+    return res.json({ success: true, useAcceleration: Boolean(useAcceleration), message: `Filtro de aceleración ${useAcceleration ? 'activado' : 'desactivado'}` });
+});
+
 app.post('/api/control', (req, res) => {
     const { action, password, stake, takeProfit, multiplier, strategy } = req.body;
     console.log(`📩 RECIBIDO EN SERVIDOR: Acción=${action} | Estrategia=${strategy} | Stake=${stake}`);
@@ -278,7 +293,10 @@ app.post('/api/control', (req, res) => {
             if (req.body.useFilters !== undefined) {
                 GOLD_DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
             }
-            console.log(`🎯 Filtros de Precisión GOLD: ${GOLD_DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS'}`);
+            if (req.body.useAcceleration !== undefined) {
+                GOLD_DYNAMIC_CONFIG.useAcceleration = Boolean(req.body.useAcceleration);
+            }
+            console.log(`🎯 Filtros GOLD: ATR/Tick=${GOLD_DYNAMIC_CONFIG.useFilters} | Aceleración=${GOLD_DYNAMIC_CONFIG.useAcceleration}`);
         }
 
         if (botState.activeStrategy === 'DYNAMIC') {
@@ -294,6 +312,10 @@ app.post('/api/control', (req, res) => {
             if (req.body.useFilters !== undefined) {
                 DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
                 console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS (Velocidad Máxima)'}`);
+            }
+            if (req.body.useAcceleration !== undefined) {
+                DYNAMIC_CONFIG.useAcceleration = Boolean(req.body.useAcceleration);
+                console.log(`⚡ Filtro Aceleración: ${DYNAMIC_CONFIG.useAcceleration ? 'ON' : 'OFF'}`);
             }
         }
 
@@ -485,11 +507,21 @@ function connectDeriv() {
         if (msg.msg_type === 'tick') {
             botState.connectionError = null; // Si llegan ticks, el mercado está vivo
             const quote = parseFloat(msg.tick.quote);
+
+            // --- CÁLCULO DE VELOCIDAD DE TICKS ---
+            const nowMs = Date.now();
+            if (botState.lastTickUpdate) {
+                const interval = nowMs - botState.lastTickUpdate;
+                botState.tickIntervals.push(interval);
+                if (botState.tickIntervals.length > 20) botState.tickIntervals.shift();
+            }
+            botState.lastTickUpdate = nowMs;
+
             tickHistory.push(quote);
             if (tickHistory.length > 200) tickHistory.shift();
 
-            const now = new Date();
-            const hour = now.getUTCHours();
+            const nowDate = new Date();
+            const hour = nowDate.getUTCHours();
 
             // Evaluamos la sesión solo para ORO, el Volatility 100 es 24/7.
             const isInsideSession = (SYMBOL === 'frxXAUUSD') ? (hour >= 11 && hour <= 21) : true;
@@ -553,13 +585,28 @@ function connectDeriv() {
                                 }
                             }
                         }
-                    }
 
-                    if (direction) executeTrade(direction);
+                        // --- FILTRO DE ACELERACIÓN (HFT) ---
+                        const activeAcc = botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG.useAcceleration : DYNAMIC_CONFIG.useAcceleration;
+                        if (direction && activeAcc && botState.tickIntervals.length >= 4) {
+                            const last4 = botState.tickIntervals.slice(-4);
+                            // Verificamos aceleración progresiva O velocidad explosiva constante
+                            const isAccelerating = (last4[0] > last4[1] && last4[1] > last4[2] && last4[2] > last4[3]);
+                            const isExplosive = last4.every(time => time < 450); // Menos de 450ms entre cada tick
+
+                            if (!isAccelerating && !isExplosive) {
+                                console.log(`🚫 FILTRO [ACELERACIÓN]: Señal rechazada | Ritmo detectado: [${last4.join(', ')}ms]`);
+                                direction = null;
+                            } else {
+                                console.log(`⚡ FILTRO [ACELERACIÓN]: ✅ ¡ACELERACIÓN CONFIRMADA! | Ritmo: [${last4.join(', ')}ms]`);
+                            }
+                        }
+                    }
                 }
+
+                if (direction) executeTrade(direction);
             }
         }
-
         // --- MANEJO DE HISTORIAL DE VELAS ---
         if (msg.msg_type === 'history' || msg.msg_type === 'candles') {
             const sym = msg.echo_req.ticks_history;
