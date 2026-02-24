@@ -89,7 +89,9 @@ let botState = {
     startBalanceDay: 0,
     isLockedByDrawdown: false,
     rsiValue: 50,
-    pm40Setup: { active: false, side: null }
+    pm40Setup: { active: false, side: null },
+    sessionDuration: 0, // Segundos acumulados en el aire
+    lastTickUpdate: Date.now()
 };
 
 // --- CARGAR ESTADO ---
