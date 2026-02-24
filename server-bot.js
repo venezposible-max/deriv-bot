@@ -118,6 +118,7 @@ function saveState() {
             tradeHistory: botState.tradeHistory,
             activeStrategy: botState.activeStrategy,
             isRunning: botState.isRunning,
+            sessionDuration: botState.sessionDuration,
             DYNAMIC_CONFIG: DYNAMIC_CONFIG
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
@@ -125,6 +126,13 @@ function saveState() {
         console.error('⚠️ Error guardando el estado:', e);
     }
 }
+
+// --- CRONÓMETRO DE SESIÓN (TIEMPO EN EL AIRE) ---
+setInterval(() => {
+    if (botState.isRunning) {
+        botState.sessionDuration = (botState.sessionDuration || 0) + 1;
+    }
+}, 1000);
 
 // --- CÁLCULOS TÉCNICOS ---
 function calculateSMA(prices, period) {
@@ -344,8 +352,9 @@ app.post('/api/clear-history', (req, res) => {
     botState.winsSession = 0;
     botState.lossesSession = 0;
     botState.pnlSession = 0;
+    botState.sessionDuration = 0; // REINICIAR TIEMPO EN EL AIRE
     saveState();
-    return res.json({ success: true, message: 'Estadísticas reiniciadas' });
+    return res.json({ success: true, message: 'Estadísticas y tiempo reiniciados' });
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
