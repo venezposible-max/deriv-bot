@@ -23,7 +23,7 @@ let DYNAMIC_CONFIG = {
 };
 
 // --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
-const SNIPER_CONFIG = {
+let SNIPER_CONFIG = {
     stake: 20,
     takeProfit: 4.00,
     stopLoss: 12.00, // Protección Blindada
@@ -36,7 +36,7 @@ const SNIPER_CONFIG = {
 };
 
 // --- PARÁMETROS PM-40 OK (PROFESIONAL ORO) ---
-const PM40_CONFIG = {
+let PM40_CONFIG = {
     stake: 10,
     takeProfit: 1.00,
     stopLoss: 2.00,
@@ -103,6 +103,9 @@ if (fs.existsSync(STATE_FILE)) {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
         if (saved.DYNAMIC_CONFIG) DYNAMIC_CONFIG = { ...DYNAMIC_CONFIG, ...saved.DYNAMIC_CONFIG };
+        if (saved.SNIPER_CONFIG) SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
+        if (saved.PM40_CONFIG) PM40_CONFIG = { ...PM40_CONFIG, ...saved.PM40_CONFIG };
+        if (saved.GOLD_DYNAMIC_CONFIG) GOLD_DYNAMIC_CONFIG = { ...GOLD_DYNAMIC_CONFIG, ...saved.GOLD_DYNAMIC_CONFIG };
         if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
         console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
@@ -123,6 +126,9 @@ function saveState() {
             isRunning: botState.isRunning,
             sessionDuration: botState.sessionDuration,
             DYNAMIC_CONFIG: DYNAMIC_CONFIG,
+            SNIPER_CONFIG: SNIPER_CONFIG,
+            PM40_CONFIG: PM40_CONFIG,
+            GOLD_DYNAMIC_CONFIG: GOLD_DYNAMIC_CONFIG,
             startBalanceDay: botState.startBalanceDay,
             isLockedByDrawdown: botState.isLockedByDrawdown
         };
@@ -297,6 +303,21 @@ app.post('/api/control', (req, res) => {
                 GOLD_DYNAMIC_CONFIG.useAcceleration = Boolean(req.body.useAcceleration);
             }
             console.log(`🎯 Filtros GOLD: ATR/Tick=${GOLD_DYNAMIC_CONFIG.useFilters} | Aceleración=${GOLD_DYNAMIC_CONFIG.useAcceleration}`);
+        }
+
+        if (botState.activeStrategy === 'SNIPER') {
+            if (stake) SNIPER_CONFIG.stake = Number(stake);
+            if (takeProfit) SNIPER_CONFIG.takeProfit = Number(takeProfit);
+            if (multiplier) SNIPER_CONFIG.multiplier = Number(multiplier);
+            if (req.body.momentum) SNIPER_CONFIG.momentum = Number(req.body.momentum);
+            if (req.body.stopLoss !== undefined) SNIPER_CONFIG.stopLoss = Number(req.body.stopLoss) || 12.00;
+        }
+
+        if (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') {
+            if (stake) PM40_CONFIG.stake = Number(stake);
+            if (takeProfit) PM40_CONFIG.takeProfit = Number(takeProfit);
+            if (multiplier) PM40_CONFIG.multiplier = Number(multiplier);
+            if (req.body.stopLoss !== undefined) PM40_CONFIG.stopLoss = Number(req.body.stopLoss) || 2.00;
         }
 
         if (botState.activeStrategy === 'DYNAMIC') {
@@ -745,25 +766,27 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
-                            // 1. ARMADO DE PROTECCIÓN (Log de aviso)
-                            if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.00) {
-                                botState.lastSlAssigned = 2.00;
-                                console.log(`🛡️ ASEGURADOR ARMADO: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo ganancia de $2.00...`);
-                            } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.00) {
-                                botState.lastSlAssigned = 1.00;
-                                console.log(`🛡️ ASEGURADOR ARMADO: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo ganancia de $1.00...`);
+                            // --- TRAILING ULTRA-AGRESIVO (Solicitado por el usuario) ---
+                            if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.50) {
+                                botState.lastSlAssigned = 2.50;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 5 ($3.00) -> Piso $2.50`);
+                            } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.50) {
+                                botState.lastSlAssigned = 1.50;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 4 ($2.00) -> Piso $1.50`);
+                            } else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.70) {
+                                botState.lastSlAssigned = 0.70;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 3 ($1.00) -> Piso $0.70`);
+                            } else if (botState.currentMaxProfit >= 0.60 && botState.lastSlAssigned < 0.40) {
+                                botState.lastSlAssigned = 0.40;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 2 ($0.60) -> Piso $0.40`);
+                            } else if (botState.currentMaxProfit >= 0.40 && botState.lastSlAssigned < 0.30) {
+                                botState.lastSlAssigned = 0.30;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 1 ($0.40) -> Piso $0.30`);
                             }
 
-                            // 2. EJECUCIÓN DE VENTA (Si el profit cae del nivel protegido)
-                            let thresholdToSell = null;
-                            if (botState.lastSlAssigned === 2.00 && currentProfit <= 2.00) {
-                                thresholdToSell = 2.00;
-                            } else if (botState.lastSlAssigned === 1.00 && currentProfit <= 1.00) {
-                                thresholdToSell = 1.00;
-                            }
-
-                            if (thresholdToSell !== null) {
-                                console.log(`⚠️ ASEGURADOR DISPARADO: Profit cayó a $${currentProfit.toFixed(2)}. Cerrando para asegurar $${thresholdToSell.toFixed(2)}...`);
+                            // CIERRE POR PROTECCIÓN (Si el profit cae del nivel protegido)
+                            if (botState.lastSlAssigned > 0 && currentProfit <= botState.lastSlAssigned) {
+                                console.log(`⚠️ TRAILING DISPARADO: Asegurando $${currentProfit.toFixed(2)} (Target Piso: $${botState.lastSlAssigned.toFixed(2)})`);
                                 sellContract(contract.contract_id);
                             }
                         }
