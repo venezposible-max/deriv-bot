@@ -489,9 +489,9 @@ function connectDeriv() {
                             botState.lastSlAssigned = 1.00;
                             console.log(`🛡️ TRAILING SECURE: Alcanzado $2.50 -> Piso Asegurado: $1.00`);
                         }
-                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.20) {
-                            botState.lastSlAssigned = 0.20;
-                            console.log(`🛡️ TRAILING SECURE: Alcanzado $1.00 -> Piso Asegurado: $0.20`);
+                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.50) {
+                            botState.lastSlAssigned = 0.50;
+                            console.log(`🛡️ TRAILING SECURE: Alcanzado $1.00 -> Piso Asegurado: $0.50`);
                         }
 
                         // Ejecutar Cierre Inmediato (Sin esperar al segundo de Deriv)
