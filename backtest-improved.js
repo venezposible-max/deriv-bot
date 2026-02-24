@@ -15,7 +15,7 @@ const CONFIG = {
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 let allPrices = [];
 let allTimes = [];
-const TARGET_TICKS = 50000;
+const TARGET_TICKS = 300000; // ~10-12 días de V100 (Máximo histórico recomendado)
 
 ws.on('open', () => { fetchHistory(); });
 

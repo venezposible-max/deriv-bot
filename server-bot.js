@@ -598,6 +598,21 @@ function connectDeriv() {
                             console.log(`⚡ [ULTRA-FAST] Trailing Activado: Venta en $${liveProfit.toFixed(2)} | Piso: $${botState.lastSlAssigned.toFixed(2)}`);
                             sellContract(botState.currentContractId);
                         }
+
+                        // --- MODO ALPHA: STOP & REVERSE (Giro de Posición) ---
+                        if (SNIPER_CONFIG.useHybrid && liveProfit <= -SNIPER_CONFIG.stopLoss && !botState.isReversing) {
+                            console.log(`⚔️ [MODO ALPHA] Stop Loss de -$${Math.abs(liveProfit).toFixed(2)} | ¡GIRANDO POSICIÓN AL INSTANTE!`);
+                            botState.isReversing = true;
+                            const reverseType = (activeContract.type === 'MULTUP' || activeContract.type === 'CALL') ? 'PUT' : 'CALL';
+
+                            sellContract(botState.currentContractId);
+
+                            // Pequeña espera para asegurar que el contrato anterior se cierre antes de abrir el nuevo
+                            setTimeout(() => {
+                                executeTrade(reverseType);
+                                botState.isReversing = false;
+                            }, 500);
+                        }
                     }
                 }
             }
