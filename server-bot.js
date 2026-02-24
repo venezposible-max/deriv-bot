@@ -14,7 +14,7 @@ const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 // --- PARÁMETROS DINÁMICOS (ESTRATEGIA 1) ---
 let DYNAMIC_CONFIG = {
     stake: 10,
-    takeProfit: 0.30,
+    takeProfit: 1.00,
     multiplier: 40,
     momentum: 5,
     stopLoss: 3.00,
@@ -725,20 +725,33 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
-                            // ESCENARIO MICRO: Al llegar a $0.30, protegemos $0.15
-                            if (botState.currentMaxProfit >= 0.30 && botState.lastSlAssigned < 0.15) {
+                            // --- ESCALERA HÍBRIDA (DYNAMIC) ---
+                            // Tramo 1: $0.30 a $0.60 (Dar aire - Pasos de $0.15)
+                            if (botState.currentMaxProfit >= 0.30 && botState.currentMaxProfit < 0.45 && botState.lastSlAssigned < 0.15) {
                                 botState.lastSlAssigned = 0.15;
-                                console.log(`🛡️ MICRO-ASEGURADOR ARMADO: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo $0.15...`);
+                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 1 ($0.30) -> Piso $0.15`);
+                            } else if (botState.currentMaxProfit >= 0.45 && botState.currentMaxProfit < 0.60 && botState.lastSlAssigned < 0.30) {
+                                botState.lastSlAssigned = 0.30;
+                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 2 ($0.45) -> Piso $0.30`);
                             }
-                            // Nivel 2: Si llega a $0.55, protegemos $0.35
-                            else if (botState.currentMaxProfit >= 0.55 && botState.lastSlAssigned < 0.35) {
-                                botState.lastSlAssigned = 0.35;
-                                console.log(`🛡️ MICRO-ASEGURADOR NIVEL 2: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo $0.35...`);
+                            // Tramo 2: $0.60 a $1.00 (Apretar cuello - Pasos de $0.10)
+                            else if (botState.currentMaxProfit >= 0.60 && botState.currentMaxProfit < 0.70 && botState.lastSlAssigned < 0.50) {
+                                botState.lastSlAssigned = 0.50;
+                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 3 ($0.60) -> Piso $0.50`);
+                            } else if (botState.currentMaxProfit >= 0.70 && botState.currentMaxProfit < 0.80 && botState.lastSlAssigned < 0.60) {
+                                botState.lastSlAssigned = 0.60;
+                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 4 ($0.70) -> Piso $0.60`);
+                            } else if (botState.currentMaxProfit >= 0.80 && botState.currentMaxProfit < 0.90 && botState.lastSlAssigned < 0.70) {
+                                botState.lastSlAssigned = 0.70;
+                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 5 ($0.80) -> Piso $0.70`);
+                            } else if (botState.currentMaxProfit >= 0.90 && botState.lastSlAssigned < 0.80) {
+                                botState.lastSlAssigned = 0.80;
+                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 6 ($0.90) -> Piso $0.80`);
                             }
 
                             // CIERRE POR PROTECCIÓN
                             if (botState.lastSlAssigned > 0 && currentProfit <= botState.lastSlAssigned) {
-                                console.log(`⚠️ MICRO-ASEGURADOR DISPARADO: Asegurando $${currentProfit.toFixed(2)} ante retroceso.`);
+                                console.log(`⚠️ ESCALERA DISPARADA: Asegurando $${currentProfit.toFixed(2)} ante retroceso.`);
                                 sellContract(contract.contract_id);
                             }
                         }
