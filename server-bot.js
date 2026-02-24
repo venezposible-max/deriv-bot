@@ -472,11 +472,26 @@ function connectDeriv() {
                         if (liveProfit > botState.currentMaxProfit) botState.currentMaxProfit = liveProfit;
 
                         // --- TRAILING DE ALTO RENDIMIENTO (Facturar $$$) ---
-                        if (botState.currentMaxProfit >= 9.00 && botState.lastSlAssigned < 8.00) botState.lastSlAssigned = 8.00;
-                        else if (botState.currentMaxProfit >= 6.00 && botState.lastSlAssigned < 4.50) botState.lastSlAssigned = 4.50;
-                        else if (botState.currentMaxProfit >= 4.00 && botState.lastSlAssigned < 2.50) botState.lastSlAssigned = 2.50;
-                        else if (botState.currentMaxProfit >= 2.50 && botState.lastSlAssigned < 1.00) botState.lastSlAssigned = 1.00; // 🎯 Primer piso real
-                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.20) botState.lastSlAssigned = 0.20; // 🛡️ Solo cubre costo inicial
+                        if (botState.currentMaxProfit >= 9.00 && botState.lastSlAssigned < 8.00) {
+                            botState.lastSlAssigned = 8.00;
+                            console.log(`🛡️ TRAILING SECURE: Alcanzado $9.00 -> Piso Asegurado: $8.00`);
+                        }
+                        else if (botState.currentMaxProfit >= 6.00 && botState.lastSlAssigned < 4.50) {
+                            botState.lastSlAssigned = 4.50;
+                            console.log(`🛡️ TRAILING SECURE: Alcanzado $6.00 -> Piso Asegurado: $4.50`);
+                        }
+                        else if (botState.currentMaxProfit >= 4.00 && botState.lastSlAssigned < 2.50) {
+                            botState.lastSlAssigned = 2.50;
+                            console.log(`🛡️ TRAILING SECURE: Alcanzado $4.00 -> Piso Asegurado: $2.50`);
+                        }
+                        else if (botState.currentMaxProfit >= 2.50 && botState.lastSlAssigned < 1.00) {
+                            botState.lastSlAssigned = 1.00;
+                            console.log(`🛡️ TRAILING SECURE: Alcanzado $2.50 -> Piso Asegurado: $1.00`);
+                        }
+                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.20) {
+                            botState.lastSlAssigned = 0.20;
+                            console.log(`🛡️ TRAILING SECURE: Alcanzado $1.00 -> Piso Asegurado: $0.20`);
+                        }
 
                         // Ejecutar Cierre Inmediato (Sin esperar al segundo de Deriv)
                         if (botState.lastSlAssigned > 0 && liveProfit <= botState.lastSlAssigned) {
