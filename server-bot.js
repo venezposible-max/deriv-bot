@@ -718,6 +718,30 @@ function connectDeriv() {
                                 sellContract(contract.contract_id);
                             }
                         }
+
+                        // --- LÓGICA MICRO-ASEGURADOR (DYNAMIC) ---
+                        if (botState.activeStrategy === 'DYNAMIC' || botState.activeStrategy === 'GOLD_DYNAMIC') {
+                            if (currentProfit > botState.currentMaxProfit) {
+                                botState.currentMaxProfit = currentProfit;
+                            }
+
+                            // ESCENARIO MICRO: Al llegar a $0.30, protegemos $0.15
+                            if (botState.currentMaxProfit >= 0.30 && botState.lastSlAssigned < 0.15) {
+                                botState.lastSlAssigned = 0.15;
+                                console.log(`🛡️ MICRO-ASEGURADOR ARMADO: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo $0.15...`);
+                            }
+                            // Nivel 2: Si llega a $0.55, protegemos $0.35
+                            else if (botState.currentMaxProfit >= 0.55 && botState.lastSlAssigned < 0.35) {
+                                botState.lastSlAssigned = 0.35;
+                                console.log(`🛡️ MICRO-ASEGURADOR NIVEL 2: Profit llegó a $${botState.currentMaxProfit.toFixed(2)}. Protegiendo $0.35...`);
+                            }
+
+                            // CIERRE POR PROTECCIÓN
+                            if (botState.lastSlAssigned > 0 && currentProfit <= botState.lastSlAssigned) {
+                                console.log(`⚠️ MICRO-ASEGURADOR DISPARADO: Asegurando $${currentProfit.toFixed(2)} ante retroceso.`);
+                                sellContract(contract.contract_id);
+                            }
+                        }
                     }
                 }
             }
