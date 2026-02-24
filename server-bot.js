@@ -527,7 +527,7 @@ function connectDeriv() {
             const isInsideSession = (SYMBOL === 'frxXAUUSD') ? (hour >= 11 && hour <= 21) : true;
 
             if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
-
+                let direction = null;
                 const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG :
                     (botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG :
                         ((botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') ? PM40_CONFIG : DYNAMIC_CONFIG));
@@ -536,8 +536,6 @@ function connectDeriv() {
                     const lastTicks = tickHistory.slice(-currentConfig.momentum);
                     const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
                     const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
-
-                    let direction = null;
 
                     if (botState.activeStrategy === 'SNIPER') {
                         // --- LÓGICA TREND SNIPER V3 ---
