@@ -16,7 +16,7 @@ let SNIPER_CONFIG = {
     stake: 20,
     takeProfit: 10.00, // 🎯 Meta Alta
     stopLoss: 3.00,    // 🛡️ SL Corto para ALPHA
-    multiplier: 100,
+    multiplier: 40,
     smaPeriod: 50,
     rsiPeriod: 14,
     rsiLow: 30,
