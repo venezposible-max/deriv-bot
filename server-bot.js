@@ -108,6 +108,7 @@ if (fs.existsSync(STATE_FILE)) {
         if (saved.SNIPER_CONFIG) SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
         if (saved.PM40_CONFIG) PM40_CONFIG = { ...PM40_CONFIG, ...saved.PM40_CONFIG };
         if (saved.GOLD_DYNAMIC_CONFIG) GOLD_DYNAMIC_CONFIG = { ...GOLD_DYNAMIC_CONFIG, ...saved.GOLD_DYNAMIC_CONFIG };
+        if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
         if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
         console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
@@ -131,6 +132,7 @@ function saveState() {
             SNIPER_CONFIG: SNIPER_CONFIG,
             PM40_CONFIG: PM40_CONFIG,
             GOLD_DYNAMIC_CONFIG: GOLD_DYNAMIC_CONFIG,
+            useHybrid: botState.useHybrid,
             startBalanceDay: botState.startBalanceDay,
             isLockedByDrawdown: botState.isLockedByDrawdown
         };
@@ -440,7 +442,15 @@ function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log('✅ Conectado a Deriv API (Usando Token de Railway)');
+        const tokenMasked = activeToken ? (activeToken.substring(0, 4) + '****') : 'MISSING';
+        console.log(`✅ Socket Abierto. Autorizando con: ${botState.customToken ? 'Token Personalizado' : 'Token de Railway'} (${tokenMasked})`);
+
+        if (!activeToken) {
+            console.error('❌ ERROR CRÍTICO: No hay token para autorizar. El bot no podrá operar.');
+            botState.connectionError = "Falta el token de Deriv";
+            return;
+        }
+
         ws.send(JSON.stringify({ authorize: activeToken }));
     });
 
