@@ -119,7 +119,9 @@ function saveState() {
             activeStrategy: botState.activeStrategy,
             isRunning: botState.isRunning,
             sessionDuration: botState.sessionDuration,
-            DYNAMIC_CONFIG: DYNAMIC_CONFIG
+            DYNAMIC_CONFIG: DYNAMIC_CONFIG,
+            startBalanceDay: botState.startBalanceDay,
+            isLockedByDrawdown: botState.isLockedByDrawdown
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -353,6 +355,8 @@ app.post('/api/clear-history', (req, res) => {
     botState.lossesSession = 0;
     botState.pnlSession = 0;
     botState.sessionDuration = 0; // REINICIAR TIEMPO EN EL AIRE
+    botState.startBalanceDay = 0; // REINICIAR RIESGO DIARIO
+    botState.isLockedByDrawdown = false; // LIBERAR BLOQUEO POR PÉRDIDA
     saveState();
     return res.json({ success: true, message: 'Estadísticas y tiempo reiniciados' });
 });
