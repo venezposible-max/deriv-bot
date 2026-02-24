@@ -586,15 +586,13 @@ function connectDeriv() {
                         // Actualizar Max Profit Real-Time
                         if (liveProfit > botState.currentMaxProfit) botState.currentMaxProfit = liveProfit;
 
-                        // Niveles de Trailing Ultra-Agresivos
+                        // Niveles de Trailing Optimizados para Rentabilidad (Más espacio para crecer)
                         if (botState.currentMaxProfit >= 9.00 && botState.lastSlAssigned < 8.50) botState.lastSlAssigned = 8.50;
                         else if (botState.currentMaxProfit >= 7.00 && botState.lastSlAssigned < 6.00) botState.lastSlAssigned = 6.00;
                         else if (botState.currentMaxProfit >= 5.00 && botState.lastSlAssigned < 4.00) botState.lastSlAssigned = 4.00;
                         else if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.50) botState.lastSlAssigned = 2.50;
                         else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.50) botState.lastSlAssigned = 1.50;
-                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.70) botState.lastSlAssigned = 0.70;
-                        else if (botState.currentMaxProfit >= 0.60 && botState.lastSlAssigned < 0.40) botState.lastSlAssigned = 0.40;
-                        else if (botState.currentMaxProfit >= 0.40 && botState.lastSlAssigned < 0.30) botState.lastSlAssigned = 0.30;
+                        else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.50) botState.lastSlAssigned = 0.50;
 
                         // Ejecutar Cierre Inmediato (Sin esperar al segundo de Deriv)
                         if (botState.lastSlAssigned > 0 && liveProfit <= botState.lastSlAssigned) {
@@ -632,9 +630,17 @@ function connectDeriv() {
 
                                 // Decisión 1: SNIPER (Cerca de la media y RSI medio)
                                 if (distPct < 0.10 && rsi >= 40 && rsi <= 60) {
-                                    if (allUp) direction = 'MULTUP';
-                                    if (allDown) direction = 'MULTDOWN';
-                                    if (direction) console.log(`🧠 [HÍBRIDO] Evento SNIPER: Continuación de Tendencia | RSI: ${rsi.toFixed(1)}`);
+                                    // Filtro de Fuerza ATR para Sniper
+                                    const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
+                                    const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+                                    const latestCandle = candleHistory[candleHistory.length - 1];
+                                    const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
+
+                                    if (currentRange >= atr * 1.1) { // Solo si la vela actual tiene fuerza
+                                        if (allUp) direction = 'MULTUP';
+                                        if (allDown) direction = 'MULTDOWN';
+                                        if (direction) console.log(`🧠 [HÍBRIDO] Evento SNIPER: Continuación de Tendencia con Fuerza | RSI: ${rsi.toFixed(1)}`);
+                                    }
                                 }
                                 // Decisión 2: DINÁMICO (Lejos de la media y RSI extremo)
                                 else if (distPct > 0.20) {
@@ -860,7 +866,7 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
-                            // --- TRAILING ULTRA-AGRESIVO EXTENDIDO (Para TP de $10) ---
+                            // --- TRAILING OPTIMIZADO (Para TP de $10) ---
                             if (botState.currentMaxProfit >= 9.00 && botState.lastSlAssigned < 8.50) {
                                 botState.lastSlAssigned = 8.50;
                                 console.log(`🛡️ SNIPER TRAILING: Nivel 8 ($9.00) -> Piso $8.50`);
@@ -876,15 +882,9 @@ function connectDeriv() {
                             } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.50) {
                                 botState.lastSlAssigned = 1.50;
                                 console.log(`🛡️ SNIPER TRAILING: Nivel 4 ($2.00) -> Piso $1.50`);
-                            } else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.70) {
-                                botState.lastSlAssigned = 0.70;
-                                console.log(`🛡️ SNIPER TRAILING: Nivel 3 ($1.00) -> Piso $0.70`);
-                            } else if (botState.currentMaxProfit >= 0.60 && botState.lastSlAssigned < 0.40) {
-                                botState.lastSlAssigned = 0.40;
-                                console.log(`🛡️ SNIPER TRAILING: Nivel 2 ($0.60) -> Piso $0.40`);
-                            } else if (botState.currentMaxProfit >= 0.40 && botState.lastSlAssigned < 0.30) {
-                                botState.lastSlAssigned = 0.30;
-                                console.log(`🛡️ SNIPER TRAILING: Nivel 1 ($0.40) -> Piso $0.30`);
+                            } else if (botState.currentMaxProfit >= 1.00 && botState.lastSlAssigned < 0.50) {
+                                botState.lastSlAssigned = 0.50;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 3 ($1.00) -> Piso $0.50`);
                             }
 
                             // CIERRE POR PROTECCIÓN (Si el profit cae del nivel protegido)
