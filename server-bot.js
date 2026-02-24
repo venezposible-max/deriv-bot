@@ -63,7 +63,8 @@ let botState = {
     sessionDuration: 0,
     lastTickUpdate: Date.now(),
     tickIntervals: [],
-    useHybrid: false
+    useHybrid: false,
+    lastScanLogTime: 0
 };
 
 // --- CARGAR ESTADO ---
@@ -528,19 +529,33 @@ function connectDeriv() {
                 let direction = null;
                 const currentConfig = SNIPER_CONFIG;
 
+                // Log de Escaneo (Cada 30 segundos para no saturar)
+                const now = Date.now();
+                if (now - botState.lastScanLogTime > 30000) {
+                    const tempSma = calculateSMA(tickHistory, currentConfig.smaPeriod);
+                    const tempRsi = calculateRSI(tickHistory, currentConfig.rsiPeriod);
+                    const distStr = tempSma ? `${(Math.abs(quote - tempSma) / tempSma * 100).toFixed(3)}%` : '---';
+                    console.log(`🔍 ESCANEANDO [${SYMBOL}]: RSI: ${tempRsi?.toFixed(1) || '--'} | Distancia: ${distStr} | Modo: ${currentConfig.useHybrid ? 'HÍBRIDO' : 'STÁNDAR'}`);
+                    botState.lastScanLogTime = now;
+                }
+
                 if (tickHistory.length >= currentConfig.momentum) {
                     const lastTicks = tickHistory.slice(-currentConfig.momentum);
                     const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
                     const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
 
+                    if (allUp || allDown) {
+                        // Log de pre-señal
+                        // console.log(`⚡ MOMENTUM DETECTADO (${allUp ? 'UP' : 'DOWN'}): Validando filtros técnicos...`);
+                    }
+
                     if (SNIPER_CONFIG.useHybrid) {
-                        // --- LÓGICA INTELIGENTE HÍBRIDA (Distancia + RSI) ---
                         const sma = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
                         const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
                         if (sma && rsi) {
                             const distPct = Math.abs(quote - sma) / sma * 100;
 
-                            // Decisión 1: SNIPER (Cerca de la media y RSI medio)
+                            // Decisión 1: SNIPER (Cerca de la media)
                             if (distPct < 0.10 && rsi >= 40 && rsi <= 60) {
                                 const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
                                 const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
@@ -548,23 +563,22 @@ function connectDeriv() {
                                 const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
 
                                 if (currentRange >= atr * 1.5) {
-                                    if (allUp) direction = 'MULTUP';
-                                    if (allDown) direction = 'MULTDOWN';
+                                    if (allUp) { direction = 'MULTUP'; console.log(`🎯 TARGET LOCKED: Confirmada señal SNIPER ALCISTA (RSI: ${rsi.toFixed(1)})`); }
+                                    if (allDown) { direction = 'MULTDOWN'; console.log(`🎯 TARGET LOCKED: Confirmada señal SNIPER BAJISTA (RSI: ${rsi.toFixed(1)})`); }
                                 }
                             }
-                            // Decisión 2: DINÁMICO (Lejos de la media y RSI extremo)
+                            // Decisión 2: DINÁMICO (Lejos de la media - MODO ALPHA)
                             else if (distPct > 0.20) {
-                                if (allUp && rsi > 75) direction = 'MULTDOWN';
-                                if (allDown && rsi < 25) direction = 'MULTUP';
+                                if (allUp && rsi > 75) { direction = 'MULTDOWN'; console.log(`⚔️ MODO ALPHA: Sobre-extensión detectada (RSI: ${rsi.toFixed(1)}). Disparando REVERSIÓN.`); }
+                                if (allDown && rsi < 25) { direction = 'MULTUP'; console.log(`⚔️ MODO ALPHA: Sobre-extensión detectada (RSI: ${rsi.toFixed(1)}). Disparando REVERSIÓN.`); }
                             }
                         }
                     } else {
-                        // --- LÓGICA TREND SNIPER ORIGINAL ---
                         const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
                         const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
                         if (trend && rsi) {
-                            if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
-                            if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
+                            if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) { direction = 'MULTUP'; console.log(`🚀 DISPARO TREND: Sniper a favor de tendencia (RSI: ${rsi.toFixed(1)})`); }
+                            if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) { direction = 'MULTDOWN'; console.log(`🚀 DISPARO TREND: Sniper a favor de tendencia (RSI: ${rsi.toFixed(1)})`); }
                         }
                     }
                 }
