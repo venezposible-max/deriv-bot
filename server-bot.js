@@ -11,51 +11,18 @@ const APP_ID = 1089;
 let SYMBOL = 'R_100'; // Símbolo por defecto
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
-// --- PARÁMETROS DINÁMICOS (ESTRATEGIA 1) ---
-let DYNAMIC_CONFIG = {
-    stake: 10,
-    takeProfit: 1.00,
-    multiplier: 40,
-    momentum: 5,
-    stopLoss: 3.00,
-    useFilters: false,  // Filtros de Precisión ATR + Densidad de Ticks
-    useAcceleration: false // Filtro de Aceleración HFT
-};
-
-// --- PARÁMETROS SNIPER V3 (TREND FOLLOWER) ---
+// --- CONFIGURACIÓN DE ESTRATEGIA UNIFICADA (SNIPER PRO) ---
 let SNIPER_CONFIG = {
     stake: 20,
     takeProfit: 10.00, // 🎯 Meta Alta
-    stopLoss: 3.00,    // 🛡️ SL Corto para rentabilidad
-    multiplier: 100, // ✅ Mínimo válido para Gold en Deriv (x100, x200, x300, x500, x800)
+    stopLoss: 3.00,    // 🛡️ SL Corto para ALPHA
+    multiplier: 100,
     smaPeriod: 50,
     rsiPeriod: 14,
     rsiLow: 30,
     rsiHigh: 70,
-    momentum: 7, // 🎯 MÁS CONFIRMACIÓN (Optimizado 24h)
-    useHybrid: false // ✅ Modo Inteligente Híbrido (Distancia + RSI)
-};
-
-// --- PARÁMETROS PM-40 OK (PROFESIONAL ORO) ---
-let PM40_CONFIG = {
-    stake: 10,
-    takeProfit: 1.00,
-    stopLoss: 2.00,
-    multiplier: 100, // ✅ Mínimo válido para Gold en Deriv (x100, x200, x300, x500, x800)
-    sma20Period: 20,
-    sma40Period: 40,
-    granularity: 60 // 1 minuto
-};
-
-// --- PARÁMETROS GOLD DYNAMIC (Momentum en ticks aplicado al Oro) ---
-const GOLD_DYNAMIC_CONFIG = {
-    stake: 10,
-    takeProfit: 2.00,  // Config campeona del backtesting Enero 2026
-    stopLoss: 3.00,
-    multiplier: 100,   // FIJO — único válido para frxXAUUSD en Multiplier
-    momentum: 5,        // 5 ticks consecutivos en la misma dirección
-    useFilters: true,   // ✅ Filtros de precisión activados por defecto
-    useAcceleration: false // Filtro de Aceleración HFT
+    momentum: 7,
+    useHybrid: false
 };
 
 // Auth y Variables
@@ -69,7 +36,7 @@ if (!API_TOKEN) {
 // === ESTADO GLOBAL DEL BOT ===
 let botState = {
     isRunning: false,
-    activeStrategy: 'SNIPER', // 'SNIPER' por defecto como pidió el usuario
+    activeStrategy: 'SNIPER', // Única estrategia permitida ahora
     isConnectedToDeriv: false,
     balance: 0,
     totalTradesSession: 0,
@@ -82,21 +49,21 @@ let botState = {
     lastSlAssigned: -12,
     activeContracts: [],
     activeProfit: 0,
-    currentContractType: null, // Tipo de contrato activo (MULTUP/MULTDOWN)
+    currentContractType: null,
     lastTradeTime: null,
-    cooldownRemaining: 0, // Segundos de enfriamiento restantes
-    customToken: null, // Token ingresado manualmente por el usuario
-    connectionError: null, // Error de conexión actual
+    cooldownRemaining: 0,
+    customToken: null,
+    connectionError: null,
     tradeHistory: [],
-    dailyLossLimit: 5.0, // 5% de pérdida máxima diaria
+    dailyLossLimit: 5.0,
     startBalanceDay: 0,
     isLockedByDrawdown: false,
     rsiValue: 50,
     pm40Setup: { active: false, side: null },
-    sessionDuration: 0, // Segundos acumulados en el aire
+    sessionDuration: 0,
     lastTickUpdate: Date.now(),
-    tickIntervals: [], // Milisegundos entre ticks
-    useHybrid: false // Estado actual del modo híbrido
+    tickIntervals: [],
+    useHybrid: false
 };
 
 // --- CARGAR ESTADO ---
@@ -104,13 +71,10 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
-        if (saved.DYNAMIC_CONFIG) DYNAMIC_CONFIG = { ...DYNAMIC_CONFIG, ...saved.DYNAMIC_CONFIG };
         if (saved.SNIPER_CONFIG) SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
-        if (saved.PM40_CONFIG) PM40_CONFIG = { ...PM40_CONFIG, ...saved.PM40_CONFIG };
-        if (saved.GOLD_DYNAMIC_CONFIG) GOLD_DYNAMIC_CONFIG = { ...GOLD_DYNAMIC_CONFIG, ...saved.GOLD_DYNAMIC_CONFIG };
         if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
         if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
-        console.log(`📦 ESTADO RECUPERADO: Estrategia=${botState.activeStrategy} | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
+        console.log(`📦 ESTADO RECUPERADO: Estrategia=SNIPER | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -125,16 +89,14 @@ function saveState() {
             lossesSession: botState.lossesSession,
             pnlSession: botState.pnlSession,
             tradeHistory: botState.tradeHistory,
-            activeStrategy: botState.activeStrategy,
+            activeStrategy: 'SNIPER',
             isRunning: botState.isRunning,
             sessionDuration: botState.sessionDuration,
-            DYNAMIC_CONFIG: DYNAMIC_CONFIG,
             SNIPER_CONFIG: SNIPER_CONFIG,
-            PM40_CONFIG: PM40_CONFIG,
-            GOLD_DYNAMIC_CONFIG: GOLD_DYNAMIC_CONFIG,
             useHybrid: botState.useHybrid,
             startBalanceDay: botState.startBalanceDay,
-            isLockedByDrawdown: botState.isLockedByDrawdown
+            isLockedByDrawdown: botState.isLockedByDrawdown,
+            activeSymbol: botState.activeSymbol
         };
         fs.writeFileSync(STATE_FILE, JSON.stringify(dataToSave, null, 2));
     } catch (e) {
@@ -192,10 +154,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
-    let activeConfig = SNIPER_CONFIG;
-    if (botState.activeStrategy === 'DYNAMIC') activeConfig = DYNAMIC_CONFIG;
-    else if (botState.activeStrategy === 'GOLD_DYNAMIC') activeConfig = GOLD_DYNAMIC_CONFIG;
-    else if (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') activeConfig = PM40_CONFIG;
+    const activeConfig = SNIPER_CONFIG;
 
     res.json({
         success: true,
@@ -245,129 +204,55 @@ app.post('/api/hybrid', (req, res) => {
 });
 
 app.post('/api/control', (req, res) => {
-    const { action, password, stake, takeProfit, multiplier, strategy } = req.body;
-    console.log(`📩 RECIBIDO EN SERVIDOR: Acción=${action} | Estrategia=${strategy} | Stake=${stake}`);
+    const { action, password, stake, takeProfit, multiplier, momentum, stopLoss, symbol } = req.body;
 
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
-    if (strategy && (strategy === 'DYNAMIC' || strategy === 'SNIPER' || strategy === 'GOLD_MASTER' || strategy === 'PM40' || strategy === 'GOLD_DYNAMIC')) {
-        if (botState.isRunning && botState.activeStrategy !== strategy) {
-            console.log(`⚠️ INTENTO DE CAMBIO BLOQUEADO: No se puede cambiar a ${strategy} mientras ${botState.activeStrategy} está en ejecución.`);
-            return res.status(400).json({ success: false, error: `El bot ya está corriendo en modo ${botState.activeStrategy}. Deténlo para cambiar.` });
-        } else {
-            botState.activeStrategy = strategy;
-            saveState();
-            console.log(`🔄 ESTRATEGIA SELECCIONADA: ${strategy}`);
-
-            // Si cambiamos a GOLD_MASTER (o antiguo PM40), re-suscribirse a candles
-            if ((strategy === 'GOLD_MASTER' || strategy === 'PM40') && ws && botState.isConnectedToDeriv) {
-                ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-                ws.send(JSON.stringify({ ohlc: SYMBOL, granularity: PM40_CONFIG.granularity, subscribe: 1 }));
-            }
-        }
-    }
-
     // --- CAMBIO DE SÍMBOLO (ORO / V100) ---
-    const targetSymbol = req.body.symbol;
-    if (targetSymbol && (targetSymbol === 'R_100' || targetSymbol === 'frxXAUUSD')) {
-        if (botState.isRunning && botState.activeSymbol !== targetSymbol) {
+    if (symbol && (symbol === 'R_100' || symbol === 'frxXAUUSD')) {
+        if (botState.isRunning && botState.activeSymbol !== symbol) {
             return res.status(400).json({ success: false, error: "Detén el bot para cambiar de mercado." });
         }
-        botState.activeSymbol = targetSymbol;
-        SYMBOL = targetSymbol;
-        botState.connectionError = null; // Limpiamos error al cambiar mercado
+        botState.activeSymbol = symbol;
+        SYMBOL = symbol;
+        botState.connectionError = null;
+        botState.activeStrategy = 'SNIPER'; // Forzar Sniper
         saveState();
-        console.log(`🌍 MERCADO CAMBIADO A: ${SYMBOL === 'R_100' ? 'Volatility 100' : 'Oro (Gold)'}`);
 
-        // Re-suscribirse limpiamente al nuevo símbolo
         if (ws && botState.isConnectedToDeriv) {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
-            ws.send(JSON.stringify({ forget_all: 'candles' })); // ✅ 'candles' es el tipo correcto para OHLC en Deriv API
+            ws.send(JSON.stringify({ forget_all: 'candles' }));
             setTimeout(() => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
-                    // Siempre pedir historial de velas para que los filtros de precisión funcionen al instante
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                 }
             }, 400);
         }
-
-        // Si solo estamos cambiando el símbolo sin otra acción, respondemos aquí
-        if (!action) {
-            return res.json({ success: true, message: `Mercado cambiado a ${targetSymbol === 'R_100' ? 'V100' : 'Oro'}` });
-        }
+        return res.json({ success: true, message: `Mercado cambiado a ${symbol === 'R_100' ? 'V100' : 'Oro'}` });
     }
 
     if (action === 'START') {
         botState.isRunning = true;
+        botState.activeStrategy = 'SNIPER';
+
+        if (stake) SNIPER_CONFIG.stake = Number(stake);
+        if (takeProfit) SNIPER_CONFIG.takeProfit = Number(takeProfit);
+        if (multiplier) SNIPER_CONFIG.multiplier = Number(multiplier);
+        if (momentum) SNIPER_CONFIG.momentum = Number(momentum);
+        if (stopLoss !== undefined) SNIPER_CONFIG.stopLoss = Number(stopLoss) || 3.00;
+
         saveState();
-
-        let actualStake = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG.stake : (stake || DYNAMIC_CONFIG.stake);
-
-        if (botState.activeStrategy === 'GOLD_DYNAMIC') {
-            if (stake) GOLD_DYNAMIC_CONFIG.stake = Number(stake);
-            if (takeProfit) GOLD_DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
-            if (req.body.stopLoss !== undefined) GOLD_DYNAMIC_CONFIG.stopLoss = Number(req.body.stopLoss) || 3.00;
-            if (req.body.momentum) GOLD_DYNAMIC_CONFIG.momentum = Number(req.body.momentum);
-            GOLD_DYNAMIC_CONFIG.multiplier = 100; // SIEMPRE FORZADO PARA ORO
-            actualStake = GOLD_DYNAMIC_CONFIG.stake;
-            if (req.body.useFilters !== undefined) {
-                GOLD_DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
-            }
-            if (req.body.useAcceleration !== undefined) {
-                GOLD_DYNAMIC_CONFIG.useAcceleration = Boolean(req.body.useAcceleration);
-            }
-            console.log(`🎯 Filtros GOLD: ATR/Tick=${GOLD_DYNAMIC_CONFIG.useFilters} | Aceleración=${GOLD_DYNAMIC_CONFIG.useAcceleration}`);
-        }
-
-        if (botState.activeStrategy === 'SNIPER') {
-            if (stake) SNIPER_CONFIG.stake = Number(stake);
-            if (takeProfit) SNIPER_CONFIG.takeProfit = Number(takeProfit);
-            if (multiplier) SNIPER_CONFIG.multiplier = Number(multiplier);
-            if (req.body.momentum) SNIPER_CONFIG.momentum = Number(req.body.momentum);
-            if (req.body.stopLoss !== undefined) SNIPER_CONFIG.stopLoss = Number(req.body.stopLoss) || 12.00;
-        }
-
-        if (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') {
-            if (stake) PM40_CONFIG.stake = Number(stake);
-            if (takeProfit) PM40_CONFIG.takeProfit = Number(takeProfit);
-            if (multiplier) PM40_CONFIG.multiplier = Number(multiplier);
-            if (req.body.stopLoss !== undefined) PM40_CONFIG.stopLoss = Number(req.body.stopLoss) || 2.00;
-        }
-
-        if (botState.activeStrategy === 'DYNAMIC') {
-            if (stake) DYNAMIC_CONFIG.stake = Number(stake);
-            if (takeProfit) DYNAMIC_CONFIG.takeProfit = Number(takeProfit);
-            if (multiplier) DYNAMIC_CONFIG.multiplier = Number(multiplier);
-            if (req.body.momentum) DYNAMIC_CONFIG.momentum = Number(req.body.momentum);
-            if (req.body.stopLoss !== undefined) {
-                const slVal = Number(req.body.stopLoss);
-                DYNAMIC_CONFIG.stopLoss = slVal > 0 ? slVal : null;
-            }
-            // Guardar preferencia de Filtros de Precisión
-            if (req.body.useFilters !== undefined) {
-                DYNAMIC_CONFIG.useFilters = Boolean(req.body.useFilters);
-                console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? 'ACTIVADOS (ATR + Tick Density)' : 'DESACTIVADOS (Velocidad Máxima)'}`);
-            }
-            if (req.body.useAcceleration !== undefined) {
-                DYNAMIC_CONFIG.useAcceleration = Boolean(req.body.useAcceleration);
-                console.log(`⚡ Filtro Aceleración: ${DYNAMIC_CONFIG.useAcceleration ? 'ON' : 'OFF'}`);
-            }
-        }
-
-        console.log(`▶️ BOT ENCENDIDO: ${botState.activeStrategy} | Stake Real: $${actualStake}`);
-        if (botState.activeStrategy === 'DYNAMIC') {
-            console.log(`🎯 Filtros de Precisión: ${DYNAMIC_CONFIG.useFilters ? '✅ ACTIVADOS (ATR + Tick Density)' : '⏸️  DESACTIVADOS (Velocidad Máxima)'}`);
-        }
-        return res.json({ success: true, message: `Bot ${botState.activeStrategy} Activado`, isRunning: true });
+        console.log(`▶️ BOT ENCENDIDO: SNIPER PRO | Stake: $${SNIPER_CONFIG.stake}`);
+        return res.json({ success: true, message: 'Bot Sniper Pro Activado', isRunning: true });
     }
 
     if (action === 'STOP') {
         botState.isRunning = false;
-        saveState(); // Guardar que el bot está apagado
+        saveState();
         console.log(`⏸️ BOT DETENIDO: El usuario pausó el algoritmo.`);
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
@@ -623,108 +508,48 @@ function connectDeriv() {
             // Evaluamos la sesión solo para ORO, el Volatility 100 es 24/7.
             const isInsideSession = (SYMBOL === 'frxXAUUSD') ? (hour >= 11 && hour <= 21) : true;
 
-            if (botState.isRunning && botState.isConnectedToDeriv && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
+            // --- LÓGICA SNIPER PRO (ÚNICA) ---
+            if (botState.isRunning && botState.activeStrategy === 'SNIPER' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
                 let direction = null;
-                const currentConfig = botState.activeStrategy === 'SNIPER' ? SNIPER_CONFIG :
-                    (botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG :
-                        ((botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') ? PM40_CONFIG : DYNAMIC_CONFIG));
+                const currentConfig = SNIPER_CONFIG;
 
-                if (botState.activeStrategy !== 'PM40' && botState.activeStrategy !== 'GOLD_MASTER' && tickHistory.length >= currentConfig.momentum) {
+                if (tickHistory.length >= currentConfig.momentum) {
                     const lastTicks = tickHistory.slice(-currentConfig.momentum);
                     const allDown = lastTicks.every((v, i) => i === 0 || v < lastTicks[i - 1]);
                     const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
 
-                    if (botState.activeStrategy === 'SNIPER') {
-                        if (SNIPER_CONFIG.useHybrid) {
-                            // --- LÓGICA INTELIGENTE HÍBRIDA (Distancia + RSI) ---
-                            const sma = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
-                            const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-                            if (sma && rsi) {
-                                const distPct = Math.abs(quote - sma) / sma * 100;
+                    if (SNIPER_CONFIG.useHybrid) {
+                        // --- LÓGICA INTELIGENTE HÍBRIDA (Distancia + RSI) ---
+                        const sma = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                        const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
+                        if (sma && rsi) {
+                            const distPct = Math.abs(quote - sma) / sma * 100;
 
-                                // Decisión 1: SNIPER (Cerca de la media y RSI medio)
-                                if (distPct < 0.10 && rsi >= 40 && rsi <= 60) {
-                                    // Filtro de Fuerza ATR para Sniper
-                                    const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
-                                    const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
-                                    const latestCandle = candleHistory[candleHistory.length - 1];
-                                    const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
-
-                                    if (currentRange >= atr * 1.5) { // 🚀 FILTRO DE EXPLOSIÓN (Alto Rendimiento)
-                                        if (allUp) direction = 'MULTUP';
-                                        if (allDown) direction = 'MULTDOWN';
-                                        if (direction) console.log(`🧠 [HÍBRIDO] Evento SNIPER: Continuación de Tendencia con Fuerza | RSI: ${rsi.toFixed(1)}`);
-                                    }
-                                }
-                                // Decisión 2: DINÁMICO (Lejos de la media y RSI extremo)
-                                else if (distPct > 0.20) {
-                                    if (allUp && rsi > 75) direction = 'MULTDOWN';
-                                    if (allDown && rsi < 25) direction = 'MULTUP';
-                                    if (direction) console.log(`🧠 [HÍBRIDO] Evento DINÁMICO: Rebote por Agotamiento | RSI: ${rsi.toFixed(1)}`);
-                                }
-                            }
-                        } else {
-                            // --- LÓGICA TREND SNIPER V3 ORIGINAL ---
-                            const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
-                            const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-                            if (trend && rsi) {
-                                if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
-                                if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
-                            }
-                        }
-                    } else {
-                        // --- LÓGICA DINÁMICA ---
-                        if (allDown) direction = 'MULTUP';
-                        if (allUp) direction = 'MULTDOWN';
-
-                        // --- FILTROS DE PRECISIÓN (ATR + Tick Density) ---
-                        const activeFilters = botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG.useFilters : DYNAMIC_CONFIG.useFilters;
-
-                        if (direction && activeFilters) {
-                            if (candleHistory.length < 15) {
-                                console.log(`⏳ FILTRO BLOQUEADO [${botState.activeStrategy}]: Calibrando sensores... (${candleHistory.length}/15 velas)`);
-                                direction = null; // SEGURIDAD: Bloquear disparo hasta tener historial completo
-                            } else {
-                                // Filtro 1: ATR - la vela actual debe tener un rango mayor que el promedio
+                            // Decisión 1: SNIPER (Cerca de la media y RSI medio)
+                            if (distPct < 0.10 && rsi >= 40 && rsi <= 60) {
                                 const ranges = candleHistory.slice(-14).map(c => c.high - c.low);
                                 const atr = ranges.reduce((a, b) => a + b, 0) / ranges.length;
                                 const latestCandle = candleHistory[candleHistory.length - 1];
                                 const currentRange = latestCandle ? (latestCandle.high - latestCandle.low) : 0;
-                                const atrPass = currentRange >= atr * 1.2;
 
-                                // Filtro 2: Densidad de Ticks (Body Ratio de la última vela)
-                                const candleBody = latestCandle ? Math.abs(latestCandle.close - latestCandle.open) : 0;
-                                const bodyRatio = currentRange > 0 ? candleBody / currentRange : 0;
-                                const pastBodyRatios = candleHistory.slice(-10).map(c => {
-                                    const r = c.high - c.low;
-                                    return r > 0 ? Math.abs(c.close - c.open) / r : 0;
-                                });
-                                const avgBodyRatio = pastBodyRatios.reduce((a, b) => a + b, 0) / pastBodyRatios.length;
-                                const tickPass = bodyRatio >= 0.55 && bodyRatio >= avgBodyRatio * 1.1;
-
-                                if (!atrPass || !tickPass) {
-                                    console.log(`🚫 FILTRO [${botState.activeStrategy}]: Señal ${direction === 'MULTUP' ? 'CALL' : 'PUT'} rechazada | ATR: ${atrPass ? '✅' : '❌'} | Tick: ${tickPass ? '✅' : '❌'}`);
-                                    direction = null;
-                                } else {
-                                    console.log(`✅ FILTRO [${botState.activeStrategy}]: Señal aprobada | ATR: ✅ | Tick: ✅ → Disparando trade`);
+                                if (currentRange >= atr * 1.5) {
+                                    if (allUp) direction = 'MULTUP';
+                                    if (allDown) direction = 'MULTDOWN';
                                 }
                             }
-                        }
-
-                        // --- FILTRO DE ACELERACIÓN (HFT) ---
-                        const activeAcc = botState.activeStrategy === 'GOLD_DYNAMIC' ? GOLD_DYNAMIC_CONFIG.useAcceleration : DYNAMIC_CONFIG.useAcceleration;
-                        if (direction && activeAcc && botState.tickIntervals.length >= 4) {
-                            const last4 = botState.tickIntervals.slice(-4);
-                            // Verificamos aceleración progresiva O velocidad explosiva constante
-                            const isAccelerating = (last4[0] > last4[1] && last4[1] > last4[2] && last4[2] > last4[3]);
-                            const isExplosive = last4.every(time => time < 450); // Menos de 450ms entre cada tick
-
-                            if (!isAccelerating && !isExplosive) {
-                                console.log(`🚫 FILTRO [ACELERACIÓN]: Señal rechazada | Ritmo detectado: [${last4.join(', ')}ms]`);
-                                direction = null;
-                            } else {
-                                console.log(`⚡ FILTRO [ACELERACIÓN]: ✅ ¡ACELERACIÓN CONFIRMADA! | Ritmo: [${last4.join(', ')}ms]`);
+                            // Decisión 2: DINÁMICO (Lejos de la media y RSI extremo)
+                            else if (distPct > 0.20) {
+                                if (allUp && rsi > 75) direction = 'MULTDOWN';
+                                if (allDown && rsi < 25) direction = 'MULTUP';
                             }
+                        }
+                    } else {
+                        // --- LÓGICA TREND SNIPER ORIGINAL ---
+                        const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                        const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
+                        if (trend && rsi) {
+                            if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
+                            if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
                         }
                     }
                 }
@@ -784,62 +609,6 @@ function connectDeriv() {
                 botState.rsiValue = calculateRSI(closes, 14);
             }
 
-            // LÓGICA GOLD MASTER BIDIRECCIONAL + FILTRO PRO MTF
-            if (botState.isRunning && (botState.activeStrategy === 'PM40' || botState.activeStrategy === 'GOLD_MASTER') && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown) {
-
-                const hour = new Date().getUTCHours();
-                if (hour < 11 || hour > 21) return; // Fuera de sesión profesional
-
-                let h1Trend = 'NEUTRAL';
-                if (candleHistoryH1.length >= 40) {
-                    const closesH1 = candleHistoryH1.map(c => c.close);
-                    const s20H1 = calculateSMA(closesH1, 20);
-                    const s40H1 = calculateSMA(closesH1, 40);
-                    if (s20H1 && s40H1) {
-                        h1Trend = s20H1 > s40H1 ? 'UP' : 'DOWN';
-                    }
-                }
-
-                if (candleHistory.length >= 40) {
-                    const s20 = calculateSMA(closes, 20);
-                    const s40 = calculateSMA(closes, 40);
-                    const currentClose = candleHistory[candleHistory.length - 1].close;
-                    const currentHigh = candleHistory[candleHistory.length - 1].high;
-                    const currentLow = candleHistory[candleHistory.length - 1].low;
-
-                    // --- LÓGICA CALL (COMPRA) ---
-                    if (h1Trend === 'UP' && s20 > s40) {
-                        if (currentLow <= s40 * 1.0002) {
-                            botState.pm40Setup.active = true;
-                            botState.pm40Setup.side = 'CALL';
-                            botState.pm40Setup.resistance = currentHigh;
-                        }
-                        if (botState.pm40Setup.active && botState.pm40Setup.side === 'CALL' && currentClose > botState.pm40Setup.resistance && botState.rsiValue < 70) {
-                            console.log(`🚀 [Expert Audit] Disparo CALL detectado: RSI ${botState.rsiValue.toFixed(1)}`);
-                            executeTrade('CALL', 1.00, 1.60); // TP/SL Optimizados por Auditoría
-                            botState.pm40Setup.active = false;
-                        } else if (botState.pm40Setup.active && botState.pm40Setup.side === 'CALL' && currentClose < s40) {
-                            botState.pm40Setup.active = false; // Invalidación
-                        }
-                    }
-
-                    // --- LÓGICA PUT (VENTA) ---
-                    else if (h1Trend === 'DOWN' && s20 < s40) {
-                        if (currentHigh >= s40 * 0.9998) {
-                            botState.pm40Setup.active = true;
-                            botState.pm40Setup.side = 'PUT';
-                            botState.pm40Setup.support = currentLow;
-                        }
-                        if (botState.pm40Setup.active && botState.pm40Setup.side === 'PUT' && currentClose < botState.pm40Setup.support && botState.rsiValue > 30) {
-                            console.log(`📉 [Expert Audit] Disparo PUT detectado: RSI ${botState.rsiValue.toFixed(1)}`);
-                            executeTrade('PUT', 1.00, 1.60);
-                            botState.pm40Setup.active = false;
-                        } else if (botState.pm40Setup.active && botState.pm40Setup.side === 'PUT' && currentClose > s40) {
-                            botState.pm40Setup.active = false; // Invalidación
-                        }
-                    }
-                }
-            }
         }
 
         if (msg.msg_type === 'buy') {
@@ -905,42 +674,6 @@ function connectDeriv() {
                             }
                         }
 
-                        // --- LÓGICA MICRO-ASEGURADOR (DYNAMIC) ---
-                        if (botState.activeStrategy === 'DYNAMIC' || botState.activeStrategy === 'GOLD_DYNAMIC') {
-                            if (currentProfit > botState.currentMaxProfit) {
-                                botState.currentMaxProfit = currentProfit;
-                            }
-
-                            // --- ESCALERA HÍBRIDA (DYNAMIC) ---
-                            // Tramo 1: $0.30 a $0.60 (Dar aire - Pasos de $0.15)
-                            if (botState.currentMaxProfit >= 0.30 && botState.currentMaxProfit < 0.45 && botState.lastSlAssigned < 0.15) {
-                                botState.lastSlAssigned = 0.15;
-                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 1 ($0.30) -> Piso $0.15`);
-                            } else if (botState.currentMaxProfit >= 0.45 && botState.currentMaxProfit < 0.60 && botState.lastSlAssigned < 0.30) {
-                                botState.lastSlAssigned = 0.30;
-                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 2 ($0.45) -> Piso $0.30`);
-                            }
-                            // Tramo 2: $0.60 a $1.00 (Apretar cuello - Pasos de $0.10)
-                            else if (botState.currentMaxProfit >= 0.60 && botState.currentMaxProfit < 0.70 && botState.lastSlAssigned < 0.50) {
-                                botState.lastSlAssigned = 0.50;
-                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 3 ($0.60) -> Piso $0.50`);
-                            } else if (botState.currentMaxProfit >= 0.70 && botState.currentMaxProfit < 0.80 && botState.lastSlAssigned < 0.60) {
-                                botState.lastSlAssigned = 0.60;
-                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 4 ($0.70) -> Piso $0.60`);
-                            } else if (botState.currentMaxProfit >= 0.80 && botState.currentMaxProfit < 0.90 && botState.lastSlAssigned < 0.70) {
-                                botState.lastSlAssigned = 0.70;
-                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 5 ($0.80) -> Piso $0.70`);
-                            } else if (botState.currentMaxProfit >= 0.90 && botState.lastSlAssigned < 0.80) {
-                                botState.lastSlAssigned = 0.80;
-                                console.log(`🛡️ ESCALERA HÍBRIDA: Nivel 6 ($0.90) -> Piso $0.80`);
-                            }
-
-                            // CIERRE POR PROTECCIÓN
-                            if (botState.lastSlAssigned > 0 && currentProfit <= botState.lastSlAssigned) {
-                                console.log(`⚠️ ESCALERA DISPARADA: Asegurando $${currentProfit.toFixed(2)} ante retroceso.`);
-                                sellContract(contract.contract_id);
-                            }
-                        }
                     }
                 }
             }
