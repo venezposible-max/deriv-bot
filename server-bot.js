@@ -32,7 +32,8 @@ let SNIPER_CONFIG = {
     rsiPeriod: 14,
     rsiLow: 30,
     rsiHigh: 70,
-    momentum: 5
+    momentum: 5,
+    useHybrid: false // ✅ Modo Inteligente Híbrido (Distancia + RSI)
 };
 
 // --- PARÁMETROS PM-40 OK (PROFESIONAL ORO) ---
@@ -94,7 +95,8 @@ let botState = {
     pm40Setup: { active: false, side: null },
     sessionDuration: 0, // Segundos acumulados en el aire
     lastTickUpdate: Date.now(),
-    tickIntervals: [] // Milisegundos entre ticks
+    tickIntervals: [], // Milisegundos entre ticks
+    useHybrid: false // Estado actual del modo híbrido
 };
 
 // --- CARGAR ESTADO ---
@@ -224,6 +226,20 @@ app.post('/api/acceleration', (req, res) => {
 
     saveState();
     return res.json({ success: true, useAcceleration: Boolean(useAcceleration), message: `Filtro de aceleración ${useAcceleration ? 'activado' : 'desactivado'}` });
+});
+
+// --- ENDPOINT: TOGGLE MODO HÍBRIDO ---
+app.post('/api/hybrid', (req, res) => {
+    const { password, useHybrid } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+
+    if (botState.activeStrategy === 'SNIPER') {
+        SNIPER_CONFIG.useHybrid = Boolean(useHybrid);
+        botState.useHybrid = Boolean(useHybrid);
+    }
+
+    saveState();
+    return res.json({ success: true, useHybrid: Boolean(useHybrid), message: `Modo Híbrido ${useHybrid ? 'ACTIVADO' : 'DESACTIVADO'}` });
 });
 
 app.post('/api/control', (req, res) => {
@@ -559,12 +575,34 @@ function connectDeriv() {
                     const allUp = lastTicks.every((v, i) => i === 0 || v > lastTicks[i - 1]);
 
                     if (botState.activeStrategy === 'SNIPER') {
-                        // --- LÓGICA TREND SNIPER V3 ---
-                        const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
-                        const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-                        if (trend && rsi) {
-                            if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
-                            if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
+                        if (SNIPER_CONFIG.useHybrid) {
+                            // --- LÓGICA INTELIGENTE HÍBRIDA (Distancia + RSI) ---
+                            const sma = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                            const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
+                            if (sma && rsi) {
+                                const distPct = Math.abs(quote - sma) / sma * 100;
+
+                                // Decisión 1: SNIPER (Cerca de la media y RSI medio)
+                                if (distPct < 0.10 && rsi >= 40 && rsi <= 60) {
+                                    if (allUp) direction = 'MULTUP';
+                                    if (allDown) direction = 'MULTDOWN';
+                                    if (direction) console.log(`🧠 [HÍBRIDO] Evento SNIPER: Continuación de Tendencia | RSI: ${rsi.toFixed(1)}`);
+                                }
+                                // Decisión 2: DINÁMICO (Lejos de la media y RSI extremo)
+                                else if (distPct > 0.20) {
+                                    if (allUp && rsi > 75) direction = 'MULTDOWN';
+                                    if (allDown && rsi < 25) direction = 'MULTUP';
+                                    if (direction) console.log(`🧠 [HÍBRIDO] Evento DINÁMICO: Rebote por Agotamiento | RSI: ${rsi.toFixed(1)}`);
+                                }
+                            }
+                        } else {
+                            // --- LÓGICA TREND SNIPER V3 ORIGINAL ---
+                            const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                            const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
+                            if (trend && rsi) {
+                                if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) direction = 'MULTUP';
+                                if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) direction = 'MULTDOWN';
+                            }
                         }
                     } else {
                         // --- LÓGICA DINÁMICA ---
@@ -766,8 +804,17 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
-                            // --- TRAILING ULTRA-AGRESIVO (Solicitado por el usuario) ---
-                            if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.50) {
+                            // --- TRAILING ULTRA-AGRESIVO EXTENDIDO (Para TP de $10) ---
+                            if (botState.currentMaxProfit >= 9.00 && botState.lastSlAssigned < 8.50) {
+                                botState.lastSlAssigned = 8.50;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 8 ($9.00) -> Piso $8.50`);
+                            } else if (botState.currentMaxProfit >= 7.00 && botState.lastSlAssigned < 6.00) {
+                                botState.lastSlAssigned = 6.00;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 7 ($7.00) -> Piso $6.00`);
+                            } else if (botState.currentMaxProfit >= 5.00 && botState.lastSlAssigned < 4.00) {
+                                botState.lastSlAssigned = 4.00;
+                                console.log(`🛡️ SNIPER TRAILING: Nivel 6 ($5.00) -> Piso $4.00`);
+                            } else if (botState.currentMaxProfit >= 3.00 && botState.lastSlAssigned < 2.50) {
                                 botState.lastSlAssigned = 2.50;
                                 console.log(`🛡️ SNIPER TRAILING: Nivel 5 ($3.00) -> Piso $2.50`);
                             } else if (botState.currentMaxProfit >= 2.00 && botState.lastSlAssigned < 1.50) {
