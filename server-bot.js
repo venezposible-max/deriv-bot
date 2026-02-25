@@ -756,8 +756,18 @@ function connectDeriv() {
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
                 saveState();
 
-                // --- COOLDOWN INTELIGENTE ---
-                if (botState.isReversing) {
+                // --- COOLDOWN INTELIGENTE Y REVERSO ALPHA (BACKUP) ---
+                if (SNIPER_CONFIG.useHybrid && profit < 0 && !botState.isReversing) {
+                    console.log(`⚔️ [ALPHA BACKUP] Detectada pérdida de $${Math.abs(profit).toFixed(2)}. Activando Reverso...`);
+                    botState.isReversing = true;
+                    isBuying = false;
+                    botState.cooldownRemaining = 0;
+                    const reverseType = (contract.contract_type === 'MULTUP' || contract.contract_type === 'CALL') ? 'PUT' : 'CALL';
+                    setTimeout(() => {
+                        executeTrade(reverseType);
+                        setTimeout(() => { botState.isReversing = false; }, 2000);
+                    }, 800);
+                } else if (botState.isReversing) {
                     botState.cooldownRemaining = 0;
                     console.log("⚔️ REVERSIÓN ALPHA: Cooldown omitido para compensación inmediata.");
                 } else {
