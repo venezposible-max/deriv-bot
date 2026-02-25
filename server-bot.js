@@ -64,7 +64,8 @@ let botState = {
     lastTickUpdate: Date.now(),
     tickIntervals: [],
     useHybrid: false,
-    lastScanLogTime: 0
+    lastScanLogTime: 0,
+    isReversing: false
 };
 
 // --- CARGAR ESTADO ---
@@ -506,13 +507,18 @@ function connectDeriv() {
                             botState.isReversing = true;
                             const reverseType = (activeContract.type === 'MULTUP' || activeContract.type === 'CALL') ? 'PUT' : 'CALL';
 
-                            sellContract(botState.currentContractId);
+                            // Cierre forzado inmediato bypass de isBuying local
+                            ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
+
+                            // Liberamos isBuying para que executeTrade pueda disparar
+                            isBuying = false;
 
                             // Pequeña espera para asegurar que el contrato anterior se cierre antes de abrir el nuevo
                             setTimeout(() => {
                                 executeTrade(reverseType);
-                                botState.isReversing = false;
-                            }, 500);
+                                // El reset de isReversing ocurre DESPUÉS del disparo
+                                setTimeout(() => { botState.isReversing = false; }, 2000);
+                            }, 800);
                         }
                     }
                 }
@@ -750,9 +756,16 @@ function connectDeriv() {
                 if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
                 saveState();
 
-                botState.cooldownRemaining = 60; // Enfriamiento de 1 minuto solicitado
+                // --- COOLDOWN INTELIGENTE ---
+                if (botState.isReversing) {
+                    botState.cooldownRemaining = 0;
+                    console.log("⚔️ REVERSIÓN ALPHA: Cooldown omitido para compensación inmediata.");
+                } else {
+                    botState.cooldownRemaining = 60; // Enfriamiento estándar
+                }
+
                 const timer = setInterval(() => {
-                    botState.cooldownRemaining--;
+                    if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
                     if (botState.cooldownRemaining <= 0) {
                         botState.cooldownRemaining = 0;
                         clearInterval(timer);
