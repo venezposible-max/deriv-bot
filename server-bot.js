@@ -376,6 +376,9 @@ function connectDeriv() {
             botState.isConnectedToDeriv = true;
             botState.connectionError = null;
             botState.balance = msg.authorize.balance;
+            if (!botState.startBalanceDay || botState.startBalanceDay === 0) {
+                botState.startBalanceDay = botState.balance; 
+            }
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             // Limpiar suscripciones anteriores antes de crear nuevas
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
@@ -395,13 +398,14 @@ function connectDeriv() {
                 }
             }, 300);
 
-            // --- SYNC PERIODICO (Evitar Fantasmas) ---
+            // --- SYNC PERIODICO Y PING KEEP-ALIVE (Evitar desconexiones) ---
             if (global.syncTimer) clearInterval(global.syncTimer);
             global.syncTimer = setInterval(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ ping: 1 })); 
                     ws.send(JSON.stringify({ portfolio: 1 }));
                 }
-            }, 15000); // Cada 15 segundos reconciliamos
+            }, 15000); // Cada 15 segundos reconciliamos y mantenemos vivo el socket
         }
 
         if (msg.msg_type === 'portfolio') {
@@ -726,15 +730,14 @@ function connectDeriv() {
                 botState.totalTradesSession++;
                 botState.pnlSession += profit;
 
-                // --- PROTECCIÓN DE DRAWDOWN DIARIO ---
-                if (!botState.startBalanceDay) botState.startBalanceDay = botState.balance + Math.abs(profit);
-                const currentLoss = botState.startBalanceDay - botState.balance;
+                // --- PROTECCIÓN DE DRAWDOWN DIARIO SEGURO ---
                 const maxAllowedLoss = botState.startBalanceDay * (botState.dailyLossLimit / 100);
 
-                if (currentLoss >= maxAllowedLoss) {
+                // Evaluamos contra el PnL real de la sesión, INMUNE a retrasos de actualización de saldo
+                if (botState.pnlSession <= -maxAllowedLoss) {
                     botState.isRunning = false;
                     botState.isLockedByDrawdown = true;
-                    console.log(`🧨 PROTECCIÓN DE PÁNICO: Se ha perdido el ${botState.dailyLossLimit}%. Bot desactivado para proteger capital.`);
+                    console.log(`🧨 PROTECCIÓN DE PÁNICO: Pérdida acumulada ($${Math.abs(botState.pnlSession).toFixed(2)}) supera el límite del ${botState.dailyLossLimit}% permitido. Bot desactivado para proteger capital.`);
                 }
 
                 if (profit > 0) botState.winsSession++; else botState.lossesSession++;
