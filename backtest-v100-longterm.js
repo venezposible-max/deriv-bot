@@ -19,7 +19,7 @@ const CONFIG = {
 
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 let allCandles = [];
-const TOTAL_CANDLES_NEEDED = 1000; // Analizaremos las últimas ~16 horas para evaluar las últimas 12h operativas
+const TOTAL_CANDLES_NEEDED = 300; // Analizaremos las últimas ~5 horas para ver la última hora con SMA200 OK
 
 ws.on('open', () => {
     console.log("📥 Descargando historial de 1 mes (en trozos)...");
@@ -94,10 +94,13 @@ function runSimulation() {
 
     const closes = allCandles.map(c => c.close);
 
-    console.log(`\n📊 Iniciando Simulación TÉCNICA MAESTRA (Últimas 12h)...`);
+    console.log(`\n📊 Iniciando Simulación TÉCNICA MAESTRA (ÚLTIMA HORA)...`);
     console.log(`Config: TP $3 | SL $1.5 | Mom 5 | SMA 200`);
 
-    for (let i = 200; i < allCandles.length; i++) {
+    // Analizaremos exactamente las últimas 720 velas (12 horas)
+    const startIndex = Math.max(200, allCandles.length - 720);
+
+    for (let i = startIndex; i < allCandles.length; i++) {
         const c = allCandles[i];
 
         let signal = null;

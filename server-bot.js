@@ -574,17 +574,23 @@ function connectDeriv() {
                             }
                         }
                     } else {
+                        const sma50 = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
                         const trendMayor = calculateSMA(tickHistory, SNIPER_CONFIG.smaLongPeriod);
                         const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-                        if (trendMayor && rsi) {
-                            // SEÑAL MAESTRA: A favor de la tendencia de 200 periodos
-                            if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow) {
-                                direction = 'MULTUP';
-                                console.log(`🚀 MASTER TREND: Disparo ALCISTA sobre SMA200 (RSI: ${rsi.toFixed(1)})`);
-                            }
-                            if (allDown && quote < trendMayor && rsi < SNIPER_CONFIG.rsiHigh) {
-                                direction = 'MULTDOWN';
-                                console.log(`🚀 MASTER TREND: Disparo BAJISTA bajo SMA200 (RSI: ${rsi.toFixed(1)})`);
+
+                        if (sma50 && trendMayor && rsi) {
+                            const distPct = Math.abs(quote - sma50) / sma50 * 100;
+
+                            // SEÑAL MAESTRA: Solo si estamos cerca de la media (Punto de Equilibrio)
+                            if (distPct < 0.08) {
+                                if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow) {
+                                    direction = 'MULTUP';
+                                    console.log(`🚀 MASTER TREND: Disparo ALCISTA (Dist: ${distPct.toFixed(3)}%)`);
+                                }
+                                if (allDown && quote < trendMayor && rsi < SNIPER_CONFIG.rsiHigh) {
+                                    direction = 'MULTDOWN';
+                                    console.log(`🚀 MASTER TREND: Disparo BAJISTA (Dist: ${distPct.toFixed(3)}%)`);
+                                }
                             }
                         }
                     }
