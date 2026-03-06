@@ -113,11 +113,15 @@ function runSimulation(ticks, times) {
             let currentProfit = priceChangePct * CONFIG.multiplier * CONFIG.stake;
             if (currentProfit > currentMaxProfit) currentMaxProfit = currentProfit;
 
-            // Trailing Stop Agresivo
-            if (currentMaxProfit >= 9.00 && lastSlAssigned < 8.50) lastSlAssigned = 8.50;
-            else if (currentMaxProfit >= 5.00 && lastSlAssigned < 4.00) lastSlAssigned = 4.00;
-            else if (currentMaxProfit >= 1.00 && lastSlAssigned < 0.70) lastSlAssigned = 0.70;
-            else if (currentMaxProfit >= 0.40 && lastSlAssigned < 0.30) lastSlAssigned = 0.30;
+            // Trailing Stop Geométrico de $0.50 (Sincronizado con Servidor)
+            if (currentMaxProfit >= 1.00) {
+                const currentStep = Math.floor(currentMaxProfit / 0.50) * 0.50;
+                const newFloor = currentStep - 0.50;
+                if (newFloor > lastSlAssigned) {
+                    lastSlAssigned = newFloor;
+                    // console.log(`🛡️ TRAILING: Escalón $${currentStep.toFixed(2)} -> Piso $${newFloor.toFixed(2)}`);
+                }
+            }
 
             let exit = false;
             let finalProfit = 0;
