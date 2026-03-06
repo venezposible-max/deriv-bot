@@ -6,8 +6,8 @@ const CONFIG = {
     stake: 20,
     takeProfit: 10.0,
     multiplier: 40,
-    momentum: 5,
-    stopLoss: 3.0,
+    momentum: 7,
+    stopLoss: 20.0,
     smaPeriod: 50,
     rsiPeriod: 14
 };
@@ -15,7 +15,7 @@ const CONFIG = {
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 let allPrices = [];
 let allTimes = [];
-const TARGET_TICKS = 10000; // Analizaremos unas 5-6 horas para ver el efecto
+const TARGET_TICKS = 10000; // Analizaremos las últimas ~6 horas de mercado
 
 ws.on('open', () => {
     fetchHistory();

@@ -11,17 +11,18 @@ const APP_ID = 1089;
 let SYMBOL = 'R_100'; // Símbolo por defecto
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
-// --- CONFIGURACIÓN DE ESTRATEGIA UNIFICADA (SNIPER PRO) ---
+// --- CONFIGURACIÓN DE ESTRATEGIA UNIFICADA (SNIPER PRO - TÉCNICA MAESTRA) ---
 let SNIPER_CONFIG = {
     stake: 20,
-    takeProfit: 10.00, // 🎯 Meta Alta
-    stopLoss: 3.00,    // 🛡️ SL Corto para ALPHA
+    takeProfit: 3.00,  // 🎯 Meta Optimizada
+    stopLoss: 1.50,    // 🛡️ SL Ultra-Corto (Ratio 2:1)
     multiplier: 40,
     smaPeriod: 50,
+    smaLongPeriod: 200, // 🏛️ Filtro de Tendencia Mayor (MAESTRO)
     rsiPeriod: 14,
-    rsiLow: 30,
-    rsiHigh: 70,
-    momentum: 7,
+    rsiLow: 45,        // Ajustado para mayor precisión
+    rsiHigh: 55,       // Ajustado para mayor precisión
+    momentum: 5,       // Frecuencia equilibrada
     useHybrid: false
 };
 
@@ -377,7 +378,7 @@ function connectDeriv() {
             botState.connectionError = null;
             botState.balance = msg.authorize.balance;
             if (!botState.startBalanceDay || botState.startBalanceDay === 0) {
-                botState.startBalanceDay = botState.balance; 
+                botState.startBalanceDay = botState.balance;
             }
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
             // Limpiar suscripciones anteriores antes de crear nuevas
@@ -402,7 +403,7 @@ function connectDeriv() {
             if (global.syncTimer) clearInterval(global.syncTimer);
             global.syncTimer = setInterval(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ ping: 1 })); 
+                    ws.send(JSON.stringify({ ping: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
                 }
             }, 15000); // Cada 15 segundos reconciliamos y mantenemos vivo el socket
@@ -477,14 +478,14 @@ function connectDeriv() {
                         // Actualizar Max Profit Real-Time
                         if (liveProfit > botState.currentMaxProfit) botState.currentMaxProfit = liveProfit;
 
-                        // --- TRAILING DE ALTO RENDIMIENTO (Mapeo Geométrico de $0.50) ---
-                        if (botState.currentMaxProfit >= 1.00) {
+                        // --- TRAILING MAESTRO (Escalón $0.50 | Protección $0.50) ---
+                        if (botState.currentMaxProfit >= 0.50) {
                             const currentStep = Math.floor(botState.currentMaxProfit / 0.50) * 0.50;
-                            const newFloor = currentStep - 0.50;
-                            
+                            const newFloor = currentStep - 0.50; // TrailDist de 0.50
+
                             if (newFloor > botState.lastSlAssigned) {
                                 botState.lastSlAssigned = newFloor;
-                                console.log(`🛡️ TRAILING SECURE: Escalón $${currentStep.toFixed(2)} -> Piso Asegurado en $${newFloor.toFixed(2)}`);
+                                console.log(`🛡️ MASTER TRAILING: Escalón $${currentStep.toFixed(2)} -> Piso $${newFloor.toFixed(2)}`);
                             }
                         }
 
@@ -573,11 +574,18 @@ function connectDeriv() {
                             }
                         }
                     } else {
-                        const trend = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
+                        const trendMayor = calculateSMA(tickHistory, SNIPER_CONFIG.smaLongPeriod);
                         const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-                        if (trend && rsi) {
-                            if (allUp && quote > trend && rsi < SNIPER_CONFIG.rsiHigh) { direction = 'MULTUP'; console.log(`🚀 DISPARO TREND: Sniper a favor de tendencia (RSI: ${rsi.toFixed(1)})`); }
-                            if (allDown && quote < trend && rsi > SNIPER_CONFIG.rsiLow) { direction = 'MULTDOWN'; console.log(`🚀 DISPARO TREND: Sniper a favor de tendencia (RSI: ${rsi.toFixed(1)})`); }
+                        if (trendMayor && rsi) {
+                            // SEÑAL MAESTRA: A favor de la tendencia de 200 periodos
+                            if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow) {
+                                direction = 'MULTUP';
+                                console.log(`🚀 MASTER TREND: Disparo ALCISTA sobre SMA200 (RSI: ${rsi.toFixed(1)})`);
+                            }
+                            if (allDown && quote < trendMayor && rsi < SNIPER_CONFIG.rsiHigh) {
+                                direction = 'MULTDOWN';
+                                console.log(`🚀 MASTER TREND: Disparo BAJISTA bajo SMA200 (RSI: ${rsi.toFixed(1)})`);
+                            }
                         }
                     }
                 }
@@ -677,14 +685,14 @@ function connectDeriv() {
                                 botState.currentMaxProfit = currentProfit;
                             }
 
-                            // --- TRAILING DE ALTO RENDIMIENTO (Mapeo Geométrico de $0.50) ---
-                            if (botState.currentMaxProfit >= 1.00) {
+                            // --- TRAILING MAESTRO (Sync) ---
+                            if (botState.currentMaxProfit >= 0.50) {
                                 const currentStep = Math.floor(botState.currentMaxProfit / 0.50) * 0.50;
                                 const newFloor = currentStep - 0.50;
-                                
+
                                 if (newFloor > botState.lastSlAssigned) {
                                     botState.lastSlAssigned = newFloor;
-                                    console.log(`🛡️ SNIPER TRAILING: Escalón $${currentStep.toFixed(2)} -> Piso $${newFloor.toFixed(2)}`);
+                                    console.log(`🛡️ MASTER TRAILING PORTFOLIO: Piso $${newFloor.toFixed(2)}`);
                                 }
                             }
 
