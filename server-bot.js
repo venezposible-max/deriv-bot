@@ -20,9 +20,9 @@ let SNIPER_CONFIG = {
     smaPeriod: 50,
     smaLongPeriod: 200, // 🏛️ Filtro de Tendencia Mayor (MAESTRO)
     rsiPeriod: 14,
-    rsiLow: 45,        // Ajustado para mayor precisión
-    rsiHigh: 55,       // Ajustado para mayor precisión
-    momentum: 5,       // Frecuencia equilibrada
+    rsiLow: 20,        // Suavizado (antes 45) para más trades
+    rsiHigh: 80,       // Suavizado (antes 55) para más trades
+    momentum: 3,       // Más rápido (antes 5)
     useHybrid: false
 };
 
@@ -581,8 +581,8 @@ function connectDeriv() {
                         if (sma50 && trendMayor && rsi) {
                             const distPct = Math.abs(quote - sma50) / sma50 * 100;
 
-                            // SEÑAL MAESTRA: Solo si estamos cerca de la media (Punto de Equilibrio)
-                            if (distPct < 0.08) {
+                            // SEÑAL MAESTRA: Suavizada de 0.08 a 0.15 para más acción
+                            if (distPct < 0.15) {
                                 if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow) {
                                     direction = 'MULTUP';
                                     console.log(`🚀 MASTER TREND: Disparo ALCISTA (Dist: ${distPct.toFixed(3)}%)`);
