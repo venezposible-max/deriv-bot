@@ -595,13 +595,13 @@ function connectDeriv() {
 
                             // SEÑAL SNIPER ELITE (Filtro 1min + Volatilidad + SMA + 0.12%)
                             if (distPct < SNIPER_CONFIG.distLimit && volOK) {
-                                if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow && trend1m === 'UP') {
+                                if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'UP') {
                                     direction = 'MULTUP';
-                                    console.log(`🎯 SNIPER ELITE: UP (Dist: ${distPct.toFixed(3)}% | Vol: ${(volSum / 5).toFixed(3)})`);
+                                    console.log(`🎯 SNIPER ELITE: UP (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | Vol: ${(volSum / 5).toFixed(3)})`);
                                 }
-                                if (allDown && quote < trendMayor && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'DOWN') {
+                                if (allDown && quote < trendMayor && rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'DOWN') {
                                     direction = 'MULTDOWN';
-                                    console.log(`🎯 SNIPER ELITE: DOWN (Dist: ${distPct.toFixed(3)}% | Vol: ${(volSum / 5).toFixed(3)})`);
+                                    console.log(`🎯 SNIPER ELITE: DOWN (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | Vol: ${(volSum / 5).toFixed(3)})`);
                                 }
                             }
                         }
