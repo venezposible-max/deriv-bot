@@ -20,9 +20,10 @@ let SNIPER_CONFIG = {
     smaPeriod: 50,
     smaLongPeriod: 200, // 🏛️ Filtro de Tendencia Mayor (MAESTRO)
     rsiPeriod: 14,
-    rsiLow: 20,        // Suavizado (antes 45) para más trades
-    rsiHigh: 80,       // Suavizado (antes 55) para más trades
-    momentum: 3,       // Más rápido (antes 5)
+    rsiLow: 25,        // Ajustado (antes 20) para evitar agotamiento
+    rsiHigh: 75,       // Ajustado (antes 80) para evitar agotamiento
+    momentum: 3,       // Alta Velocidad
+    distLimit: 0.12,   // 🎯 MÁXIMA PRECISIÓN (antes 0.15)
     useHybrid: false
 };
 
@@ -581,15 +582,26 @@ function connectDeriv() {
                         if (sma50 && trendMayor && rsi) {
                             const distPct = Math.abs(quote - sma50) / sma50 * 100;
 
-                            // SEÑAL MAESTRA: Suavizada de 0.08 a 0.15 para más acción
-                            if (distPct < 0.15) {
-                                if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow) {
+                            // 📡 EXTRAS DE PRECISIÓN (OCP)
+                            // 1. Tendencia 1 Minuto (Lookback 60 ticks)
+                            const price1m = tickHistory[tickHistory.length - 60] || tickHistory[0];
+                            const trend1m = quote > price1m ? 'UP' : 'DOWN';
+
+                            // 2. Filtro Volatilidad (ATR-5) para evitar ruido
+                            const last5 = tickHistory.slice(-5);
+                            let volSum = 0;
+                            for (let j = 1; j < last5.length; j++) volSum += Math.abs(last5[j] - last5[j - 1]);
+                            const volOK = (volSum / 5) > 0.015;
+
+                            // SEÑAL SNIPER ELITE (Filtro 1min + Volatilidad + SMA + 0.12%)
+                            if (distPct < SNIPER_CONFIG.distLimit && volOK) {
+                                if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow && trend1m === 'UP') {
                                     direction = 'MULTUP';
-                                    console.log(`🚀 MASTER TREND: Disparo ALCISTA (Dist: ${distPct.toFixed(3)}%)`);
+                                    console.log(`🎯 SNIPER ELITE: UP (Dist: ${distPct.toFixed(3)}% | Vol: ${(volSum / 5).toFixed(3)})`);
                                 }
-                                if (allDown && quote < trendMayor && rsi < SNIPER_CONFIG.rsiHigh) {
+                                if (allDown && quote < trendMayor && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'DOWN') {
                                     direction = 'MULTDOWN';
-                                    console.log(`🚀 MASTER TREND: Disparo BAJISTA (Dist: ${distPct.toFixed(3)}%)`);
+                                    console.log(`🎯 SNIPER ELITE: DOWN (Dist: ${distPct.toFixed(3)}% | Vol: ${(volSum / 5).toFixed(3)})`);
                                 }
                             }
                         }
