@@ -741,26 +741,7 @@ function connectDeriv() {
                 // --- PROTECCIÓN DE DRAWDOWN DIARIO SEGURO ---
                 const maxAllowedLoss = botState.startBalanceDay * (botState.dailyLossLimit / 100);
 
-                // --- LÓGICA STOP & REVERSE (MEJORA DE RECUPERACIÓN) ---
-                if (profit < 0 && !botState.isReversing && botState.isRunning && botState.activeStrategy === 'SNIPER') {
-                    const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
-                    // Solo revertimos si sigue en zona de seguridad 25-75
-                    if (rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh) {
-                        const reverseType = contract.contract_type === 'MULTUP' ? 'MULTDOWN' : 'MULTUP';
-                        console.log(`🔄 STOP & REVERSE: Pérdida detectada ($${profit.toFixed(2)}). Revirtiendo de inmediato a ${reverseType}...`);
-                        botState.isReversing = true; // Marcamos que este es un trade de reversión
-                        executeTrade(reverseType);
-                    } else {
-                        botState.isReversing = false;
-                        console.log(`📡 REVISIÓN: No se revierte. RSI fuera de zona segura (${rsi.toFixed(1)}).`);
-                    }
-                } else {
-                    // Si ganamos o ya era una reversión, reseteamos el flag
-                    if (profit > 0) {
-                        if (botState.isReversing) console.log(`✅ REVERSIÓN EXITOSA: Recuperado con profit de $${profit.toFixed(2)}`);
-                    }
-                    botState.isReversing = false;
-                }
+                botState.isReversing = false; // Reset flag por seguridad
 
                 // Evaluamos contra el PnL real de la sesión, INMUNE a retrasos de actualización de saldo
                 if (botState.pnlSession <= -maxAllowedLoss) {
