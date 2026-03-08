@@ -75,20 +75,19 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
-        if (saved.SNIPER_CONFIG) SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
+        if (saved.SNIPER_CONFIG) {
+            SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
+        }
         if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
 
-        // --- RESET AGRESIVO A STEP INDEX (Override total) ---
+        // --- OPTIMIZACIÓN PARA STEP INDEX (Garantía de símbolos) ---
         botState.activeSymbol = 'stpRNG';
         SYMBOL = 'stpRNG';
-        SNIPER_CONFIG.multiplier = 750;
-        SNIPER_CONFIG.momentum = 5;
-        SNIPER_CONFIG.stake = 20;
-        SNIPER_CONFIG.takeProfit = 3.00;
-        SNIPER_CONFIG.stopLoss = 1.50;
-        SNIPER_CONFIG.distLimit = 0.08;
 
-        console.log(`📦 ESTADO RECUPERADO Y OPTIMIZADO: Step Index activado con multiplicador 750.`);
+        // Aseguramos multiplicador mínimo de 750 si es menor (por seguridad en Step Index)
+        if (SNIPER_CONFIG.multiplier < 750) SNIPER_CONFIG.multiplier = 750;
+
+        console.log(`📦 ESTADO RECUPERADO: Step Index listo. Stop Loss Actual: $${SNIPER_CONFIG.stopLoss}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -261,7 +260,8 @@ app.post('/api/control', (req, res) => {
         if (takeProfit) SNIPER_CONFIG.takeProfit = Number(takeProfit);
         if (multiplier) SNIPER_CONFIG.multiplier = Number(multiplier);
         if (momentum) SNIPER_CONFIG.momentum = Number(momentum);
-        if (stopLoss !== undefined) SNIPER_CONFIG.stopLoss = Number(stopLoss) || 3.00;
+        if (stopLoss !== undefined) SNIPER_CONFIG.stopLoss = Math.abs(Number(stopLoss));
+        if (distLimit) SNIPER_CONFIG.distLimit = Number(distLimit);
 
         saveState();
         console.log(`▶️ BOT ENCENDIDO: SNIPER PRO | Stake: $${SNIPER_CONFIG.stake}`);
