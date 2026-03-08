@@ -496,7 +496,7 @@ function connectDeriv() {
                         // --- TRAILING MAESTRO (Escalón $0.50 | Protección $0.50) ---
                         if (botState.currentMaxProfit >= 0.50) {
                             const currentStep = Math.floor(botState.currentMaxProfit / 0.50) * 0.50;
-                            const newFloor = currentStep - 0.50; // TrailDist de 0.50
+                            const newFloor = currentStep - 0.30; // Protegemos $0.20 al tocar los $0.50
 
                             if (newFloor > botState.lastSlAssigned) {
                                 botState.lastSlAssigned = newFloor;
@@ -720,7 +720,7 @@ function connectDeriv() {
                             // --- TRAILING MAESTRO (Sync) ---
                             if (botState.currentMaxProfit >= 0.50) {
                                 const currentStep = Math.floor(botState.currentMaxProfit / 0.50) * 0.50;
-                                const newFloor = currentStep - 0.50;
+                                const newFloor = currentStep - 0.30; // Protegemos $0.20 al tocar los $0.50
 
                                 if (newFloor > botState.lastSlAssigned) {
                                     botState.lastSlAssigned = newFloor;
