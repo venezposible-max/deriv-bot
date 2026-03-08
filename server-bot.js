@@ -22,8 +22,8 @@ let SNIPER_CONFIG = {
     rsiPeriod: 14,
     rsiLow: 25,        // Ajustado (antes 20) para evitar agotamiento
     rsiHigh: 75,       // Ajustado (antes 80) para evitar agotamiento
-    momentum: 3,       // Alta Velocidad
-    distLimit: 0.12,   // 🎯 MÁXIMA PRECISIÓN (antes 0.15)
+    momentum: 5,       // Confirmación más sólida
+    distLimit: 0.08,   // 🎯 PRECISIÓN EXTREMA (Filtro para mercado sucio)
     useHybrid: false
 };
 
