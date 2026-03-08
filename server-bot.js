@@ -77,7 +77,11 @@ if (fs.existsSync(STATE_FILE)) {
         botState = { ...botState, ...saved, isConnectedToDeriv: false, activeContracts: [], activeProfit: 0 };
         if (saved.SNIPER_CONFIG) SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
         if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
-        if (botState.activeSymbol) SYMBOL = botState.activeSymbol;
+
+        // FORZAMOS EL MERCADO A STEP INDEX (Garantía de cambio)
+        botState.activeSymbol = 'stpRNG';
+        SYMBOL = 'stpRNG';
+
         console.log(`📦 ESTADO RECUPERADO: Estrategia=SNIPER | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
@@ -160,6 +164,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/status', (req, res) => {
     const activeConfig = SNIPER_CONFIG;
 
+    botState.activeSymbol = SYMBOL; // Refuerzo para la UI
     res.json({
         success: true,
         data: botState,
