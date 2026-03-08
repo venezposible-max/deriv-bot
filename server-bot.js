@@ -730,7 +730,7 @@ function connectDeriv() {
                             }
 
                             // --- TRAILING MAESTRO (Sync) ---
-                            if (botState.currentMaxProfit >= 0.50) {
+                            if (SNIPER_CONFIG.useTrailing && botState.currentMaxProfit >= 0.50) {
                                 const currentStep = Math.floor(botState.currentMaxProfit / 0.50) * 0.50;
                                 const newFloor = currentStep - 0.30; // Protegemos $0.20 al tocar los $0.50
 
@@ -741,7 +741,7 @@ function connectDeriv() {
                             }
 
                             // CIERRE POR PROTECCIÓN (Si el profit cae del nivel protegido)
-                            if (botState.lastSlAssigned > 0 && currentProfit <= botState.lastSlAssigned) {
+                            if (SNIPER_CONFIG.useTrailing && botState.lastSlAssigned > 0 && currentProfit <= botState.lastSlAssigned) {
                                 console.log(`⚠️ TRAILING DISPARADO: Asegurando $${currentProfit.toFixed(2)} (Target Piso: $${botState.lastSlAssigned.toFixed(2)})`);
                                 sellContract(contract.contract_id);
                             }
