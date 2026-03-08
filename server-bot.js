@@ -8,7 +8,7 @@ const fs = require('fs');
 // CONFIGURACIÓN DEL BOT - MULTI-ESTRATEGIA
 // ==========================================
 const APP_ID = 1089;
-let SYMBOL = 'R_100'; // Símbolo por defecto
+let SYMBOL = 'stpRNG'; // Símbolo Step Index (Ultra Rentable)
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
 // --- CONFIGURACIÓN DE ESTRATEGIA UNIFICADA (SNIPER PRO - TÉCNICA MAESTRA) ---
@@ -45,7 +45,7 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     pnlSession: 0,
-    activeSymbol: 'R_100', // Símbolo activo (R_100 o frxXAUUSD)
+    activeSymbol: 'stpRNG', // Símbolo activo (Step Index)
     currentContractId: null,
     currentMaxProfit: 0,
     lastSlAssigned: -12,
