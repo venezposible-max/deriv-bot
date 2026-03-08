@@ -254,6 +254,7 @@ app.post('/api/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
+        botState.isLockedByDrawdown = false;
         botState.activeStrategy = 'SNIPER';
 
         if (stake) SNIPER_CONFIG.stake = Number(stake);
@@ -751,18 +752,15 @@ function connectDeriv() {
                 }
                 botState.totalTradesSession++;
                 botState.pnlSession += profit;
+                botState.isReversing = false;
 
-                // --- PROTECCIÓN DE DRAWDOWN DIARIO SEGURO ---
-                const maxAllowedLoss = botState.startBalanceDay * (botState.dailyLossLimit / 100);
-
-                botState.isReversing = false; // Reset flag por seguridad
-
-                // Evaluamos contra el PnL real de la sesión, INMUNE a retrasos de actualización de saldo
-                if (botState.pnlSession <= -maxAllowedLoss) {
-                    botState.isRunning = false;
-                    botState.isLockedByDrawdown = true;
-                    console.log(`🧨 PROTECCIÓN DE PÁNICO: Pérdida acumulada ($${Math.abs(botState.pnlSession).toFixed(2)}) supera el límite del ${botState.dailyLossLimit}% permitido. Bot desactivado para proteger capital.`);
-                }
+                // --- PROTECCIÓN DE DRAWDOWN DIARIO SEGURO (DESHABILITADO POR USUARIO) ---
+                // const maxAllowedLoss = botState.startBalanceDay * (botState.dailyLossLimit / 100);
+                // if (botState.pnlSession <= -maxAllowedLoss) {
+                //     botState.isRunning = false;
+                //     botState.isLockedByDrawdown = true;
+                //     console.log(`🧨 PROTECCIÓN DE PÁNICO: LÍMITE ALCANZADO (DESACTIVADO PARA MODO CONTINUO)`);
+                // }
 
                 if (profit > 0) botState.winsSession++; else botState.lossesSession++;
                 isBuying = false;
