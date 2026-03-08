@@ -219,15 +219,16 @@ app.post('/api/control', (req, res) => {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
     }
 
-    // --- CAMBIO DE SÍMBOLO (ORO / V100) ---
-    if (symbol && (symbol === 'R_100' || symbol === 'frxXAUUSD')) {
+    // --- CAMBIO DE SÍMBOLO ---
+    if (symbol && (symbol === 'R_100' || symbol === 'frxXAUUSD' || symbol === 'stpRNG')) {
         if (botState.isRunning && botState.activeSymbol !== symbol) {
             return res.status(400).json({ success: false, error: "Detén el bot para cambiar de mercado." });
         }
+
         botState.activeSymbol = symbol;
         SYMBOL = symbol;
         botState.connectionError = null;
-        botState.activeStrategy = 'SNIPER'; // Forzar Sniper
+        botState.activeStrategy = 'SNIPER'; // Forzar Sniper por ahora
         saveState();
 
         if (ws && botState.isConnectedToDeriv) {
@@ -241,7 +242,9 @@ app.post('/api/control', (req, res) => {
                 }
             }, 400);
         }
-        return res.json({ success: true, message: `Mercado cambiado a ${symbol === 'R_100' ? 'V100' : 'Oro'}` });
+
+        const marketName = symbol === 'stpRNG' ? 'Step Index' : (symbol === 'R_100' ? 'V100' : 'Oro');
+        return res.json({ success: true, message: `Mercado cambiado a ${marketName}` });
     }
 
     if (action === 'START') {
