@@ -4,24 +4,20 @@ const SYMBOL = 'stpRNG';
 
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 let allTicks = [];
-const TOTAL_TICKS_NEEDED = 86400; // 24h aprox.
+const TOTAL_TICKS_NEEDED = 86400;
 
-// CONFIGURACIÓN EXACTA DE LA CAPTURA
 const CONFIG = {
     stake: 20,
     takeProfit: 3.00,
     stopLoss: 3.00,
     multiplier: 750,
-    smaPeriod: 50,
-    smaLongPeriod: 200,
-    momentum: 3,
+    smaPeriod: 50, smaLongPeriod: 200, momentum: 3,
     distLimit: 0.15,
-    trailStart: 0.50,
-    trailDist: 0.30
+    trailStart: 0.50, trailDist: 0.30
 };
 
 ws.on('open', () => {
-    console.log(`\n📥 AUTOPSIA TÉCNICA: ANALIZANDO 24H CON 0.15/M3/SL3...`);
+    console.log(`\n📥 PROYECTANDO DÓLARES DIARIOS (0.15 / MOM 3)...`);
     fetchTicks();
 });
 
@@ -36,11 +32,9 @@ ws.on('message', (data) => {
         const times = msg.history.times || [];
         allTicks = [...chunk, ...allTicks];
         if (allTicks.length < TOTAL_TICKS_NEEDED && chunk.length > 0) {
-            process.stdout.write('.');
             fetchTicks(times[0]);
         } else {
-            console.log(`\n✅ DATA OK.`);
-            runAutopsy();
+            runSim();
             ws.close();
         }
     }
@@ -53,13 +47,9 @@ function calculateSMA(prices, period) {
     return sum / period;
 }
 
-function runAutopsy() {
+function runSim() {
     let balance = 0, wins = 0, losses = 0, trades = 0;
-    let totalWinDolar = 0, totalLossDolar = 0;
     let inTrade = false, entryPrice = 0, tradeType = null, maxProfit = 0, lastSl = -99;
-
-    // Distribución de ganancias
-    let count017 = 0, countFullTP = 0, countMedian = 0;
 
     for (let i = 250; i < allTicks.length; i++) {
         const quote = allTicks[i];
@@ -90,33 +80,15 @@ function runAutopsy() {
             if (prof >= CONFIG.takeProfit) { pnl = CONFIG.takeProfit; closed = true; }
             else if (prof <= -CONFIG.stopLoss) { pnl = -CONFIG.stopLoss; closed = true; }
             else if (lastSl > -90 && prof <= lastSl) { pnl = lastSl; closed = true; }
-            if (closed) {
-                balance += pnl;
-                if (pnl > 0) {
-                    wins++; totalWinDolar += pnl;
-                    if (pnl <= 0.25) count017++;
-                    else if (pnl >= 3.0) countFullTP++;
-                    else countMedian++;
-                } else {
-                    losses++; totalLossDolar += Math.abs(pnl);
-                }
-                inTrade = false;
-            }
+            if (closed) { balance += pnl; if (pnl > 0) wins++; else losses++; inTrade = false; }
         }
     }
 
     console.log("\n=========================================");
-    console.log("🕵️‍♂️ AUTOPSIA TÉCNICA: MODO 0.15/M3");
+    console.log(`💰 PROYECCIÓN DINERO REAL (0.15 / MOM 3)`);
     console.log("=========================================");
-    console.log(`PnL Neto 24h: $${balance.toFixed(2)}`);
-    console.log(`Win Rate: ${((wins / trades) * 100).toFixed(1)}% (${wins}W / ${losses}L)`);
-    console.log(`\n--- ANÁLISIS DE PAGOS ---`);
-    console.log(`Ganancia Promedio Verdes: $${(totalWinDolar / wins).toFixed(2)}`);
-    console.log(`Pérdida Promedio Rojos: $${(totalLossDolar / losses).toFixed(2)}`);
-    console.log(`Ratio Real (R:R): 1 : ${(totalLossDolar / losses / (totalWinDolar / wins)).toFixed(1)}`);
-    console.log(`\n--- DETALLE DE VERDES ---`);
-    console.log(`Trades de centavos (+0.17): ${count017}`);
-    console.log(`Trades medianos: ${countMedian}`);
-    console.log(`Trades Take Profit (+3.0): ${countFullTP}`);
+    console.log(`Profit Neto 24h (Simulado): $${balance.toFixed(2)}`);
+    console.log(`Win Rate: ${((wins / (trades || 1)) * 100).toFixed(1)}%`);
+    console.log(`Total Trades: ${trades}`);
     console.log("=========================================");
 }

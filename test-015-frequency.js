@@ -4,9 +4,8 @@ const SYMBOL = 'stpRNG';
 
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 let allTicks = [];
-const TOTAL_TICKS_NEEDED = 86400; // 24h aprox.
+const TOTAL_TICKS_NEEDED = 3600 * 24;
 
-// CONFIGURACIÓN EXACTA DE LA CAPTURA
 const CONFIG = {
     stake: 20,
     takeProfit: 3.00,
@@ -14,14 +13,14 @@ const CONFIG = {
     multiplier: 750,
     smaPeriod: 50,
     smaLongPeriod: 200,
-    momentum: 3,
-    distLimit: 0.15,
+    momentum: 3,       // El que el usuario puso
+    distLimit: 0.15,   // El que el usuario pregunta
     trailStart: 0.50,
     trailDist: 0.30
 };
 
 ws.on('open', () => {
-    console.log(`\n📥 AUTOPSIA TÉCNICA: ANALIZANDO 24H CON 0.15/M3/SL3...`);
+    console.log(`\n📥 SIMULANDO CONFIGURACIÓN 0.15 / MOM 3 (ULTIMAS 24H)...`);
     fetchTicks();
 });
 
@@ -36,11 +35,9 @@ ws.on('message', (data) => {
         const times = msg.history.times || [];
         allTicks = [...chunk, ...allTicks];
         if (allTicks.length < TOTAL_TICKS_NEEDED && chunk.length > 0) {
-            process.stdout.write('.');
             fetchTicks(times[0]);
         } else {
-            console.log(`\n✅ DATA OK.`);
-            runAutopsy();
+            runStats();
             ws.close();
         }
     }
@@ -53,31 +50,27 @@ function calculateSMA(prices, period) {
     return sum / period;
 }
 
-function runAutopsy() {
-    let balance = 0, wins = 0, losses = 0, trades = 0;
-    let totalWinDolar = 0, totalLossDolar = 0;
+function runStats() {
+    let trades = 0;
     let inTrade = false, entryPrice = 0, tradeType = null, maxProfit = 0, lastSl = -99;
 
-    // Distribución de ganancias
-    let count017 = 0, countFullTP = 0, countMedian = 0;
-
     for (let i = 250; i < allTicks.length; i++) {
-        const quote = allTicks[i];
         if (!inTrade) {
             const lastTicks = allTicks.slice(i - CONFIG.momentum, i);
             const allUp = lastTicks.every((v, j) => j === 0 || v > lastTicks[j - 1]);
             const allDown = lastTicks.every((v, j) => j === 0 || v < lastTicks[j - 1]);
             const sma50 = calculateSMA(allTicks.slice(0, i), CONFIG.smaPeriod);
             const sma200 = calculateSMA(allTicks.slice(0, i), CONFIG.smaLongPeriod);
+
             if (sma50 && sma200) {
-                const distPct = Math.abs(quote - sma50) / sma50 * 100;
+                const distPct = Math.abs(allTicks[i] - sma50) / sma50 * 100;
                 if (distPct < CONFIG.distLimit) {
-                    if (allUp && quote > sma200) { inTrade = true; tradeType = 'UP'; entryPrice = quote; maxProfit = 0; lastSl = -99; trades++; }
-                    else if (allDown && quote < sma200) { inTrade = true; tradeType = 'DOWN'; entryPrice = quote; maxProfit = 0; lastSl = -99; trades++; }
+                    if (allUp && allTicks[i] > sma200) { inTrade = true; tradeType = 'UP'; entryPrice = allTicks[i]; maxProfit = 0; lastSl = -99; trades++; }
+                    else if (allDown && allTicks[i] < sma200) { inTrade = true; tradeType = 'DOWN'; entryPrice = allTicks[i]; maxProfit = 0; lastSl = -99; trades++; }
                 }
             }
         } else {
-            let diff = (quote - entryPrice);
+            let diff = (allTicks[i] - entryPrice);
             if (tradeType === 'DOWN') diff = -diff;
             const prof = diff * 7.5;
             if (prof > maxProfit) maxProfit = prof;
@@ -86,37 +79,16 @@ function runAutopsy() {
                 const newFloor = step - CONFIG.trailDist;
                 if (newFloor > lastSl) lastSl = newFloor;
             }
-            let closed = false, pnl = 0;
-            if (prof >= CONFIG.takeProfit) { pnl = CONFIG.takeProfit; closed = true; }
-            else if (prof <= -CONFIG.stopLoss) { pnl = -CONFIG.stopLoss; closed = true; }
-            else if (lastSl > -90 && prof <= lastSl) { pnl = lastSl; closed = true; }
-            if (closed) {
-                balance += pnl;
-                if (pnl > 0) {
-                    wins++; totalWinDolar += pnl;
-                    if (pnl <= 0.25) count017++;
-                    else if (pnl >= 3.0) countFullTP++;
-                    else countMedian++;
-                } else {
-                    losses++; totalLossDolar += Math.abs(pnl);
-                }
-                inTrade = false;
-            }
+            let closed = false;
+            if (prof >= CONFIG.takeProfit || prof <= -CONFIG.stopLoss || (lastSl > -90 && prof <= lastSl)) closed = true;
+            if (closed) inTrade = false;
         }
     }
 
     console.log("\n=========================================");
-    console.log("🕵️‍♂️ AUTOPSIA TÉCNICA: MODO 0.15/M3");
+    console.log(`📊 RESULTADO SIMULACIÓN (0.15 / MOM 3)`);
     console.log("=========================================");
-    console.log(`PnL Neto 24h: $${balance.toFixed(2)}`);
-    console.log(`Win Rate: ${((wins / trades) * 100).toFixed(1)}% (${wins}W / ${losses}L)`);
-    console.log(`\n--- ANÁLISIS DE PAGOS ---`);
-    console.log(`Ganancia Promedio Verdes: $${(totalWinDolar / wins).toFixed(2)}`);
-    console.log(`Pérdida Promedio Rojos: $${(totalLossDolar / losses).toFixed(2)}`);
-    console.log(`Ratio Real (R:R): 1 : ${(totalLossDolar / losses / (totalWinDolar / wins)).toFixed(1)}`);
-    console.log(`\n--- DETALLE DE VERDES ---`);
-    console.log(`Trades de centavos (+0.17): ${count017}`);
-    console.log(`Trades medianos: ${countMedian}`);
-    console.log(`Trades Take Profit (+3.0): ${countFullTP}`);
+    console.log(`Total Trades Simulados (24h): ${trades}`);
+    console.log(`Promedio por Hora (Simulado): ${(trades / 24).toFixed(1)}`);
     console.log("=========================================");
 }

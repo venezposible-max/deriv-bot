@@ -24,7 +24,8 @@ let SNIPER_CONFIG = {
     rsiHigh: 75,       // Ajustado (antes 80) para evitar agotamiento
     momentum: 5,       // Confirmación más sólida
     distLimit: 0.08,   // 🎯 PRECISIÓN EXTREMA (Filtro para mercado sucio)
-    useHybrid: false
+    useHybrid: false,
+    useTrailing: true  // --- ACTIVAR/DESACTIVAR TRAILING ---
 };
 
 // Auth y Variables
@@ -215,6 +216,16 @@ app.post('/api/hybrid', (req, res) => {
 
     saveState();
     return res.json({ success: true, useHybrid: Boolean(useHybrid), message: `Modo Híbrido ${useHybrid ? 'ACTIVADO' : 'DESACTIVADO'}` });
+});
+
+// --- ENDPOINT: TOGGLE TRAILING STOP ---
+app.post('/api/trailing', (req, res) => {
+    const { password, useTrailing } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+
+    SNIPER_CONFIG.useTrailing = Boolean(useTrailing);
+    saveState();
+    return res.json({ success: true, useTrailing: Boolean(useTrailing), message: `Trailing Stop ${useTrailing ? 'ACTIVADO' : 'DESACTIVADO'}` });
 });
 
 app.post('/api/control', (req, res) => {
@@ -495,7 +506,7 @@ function connectDeriv() {
                         if (liveProfit > botState.currentMaxProfit) botState.currentMaxProfit = liveProfit;
 
                         // --- TRAILING MAESTRO (Escalón $0.50 | Protección $0.50) ---
-                        if (botState.currentMaxProfit >= 0.50) {
+                        if (SNIPER_CONFIG.useTrailing && botState.currentMaxProfit >= 0.50) {
                             const currentStep = Math.floor(botState.currentMaxProfit / 0.50) * 0.50;
                             const newFloor = currentStep - 0.30; // Protegemos $0.20 al tocar los $0.50
 
@@ -506,7 +517,7 @@ function connectDeriv() {
                         }
 
                         // Ejecutar Cierre Inmediato (Sin esperar al segundo de Deriv)
-                        if (botState.lastSlAssigned > 0 && liveProfit <= botState.lastSlAssigned) {
+                        if (SNIPER_CONFIG.useTrailing && botState.lastSlAssigned > 0 && liveProfit <= botState.lastSlAssigned) {
                             console.log(`⚡ [ULTRA-FAST] Trailing Activado: Venta en $${liveProfit.toFixed(2)} | Piso: $${botState.lastSlAssigned.toFixed(2)}`);
                             sellContract(botState.currentContractId);
                         }
