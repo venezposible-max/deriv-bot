@@ -97,8 +97,8 @@ function runSimulation() {
     console.log(`\n📊 Iniciando Simulación TÉCNICA MAESTRA (ÚLTIMA HORA)...`);
     console.log(`Config: TP $3 | SL $1.5 | Mom 5 | SMA 200`);
 
-    // Analizaremos exactamente las últimas 720 velas (12 horas)
-    const startIndex = Math.max(200, allCandles.length - 720);
+    // Analizaremos exactamente las últimas 60 velas (1 hora operativa)
+    const startIndex = Math.max(200, allCandles.length - 60);
 
     for (let i = startIndex; i < allCandles.length; i++) {
         const c = allCandles[i];
@@ -110,7 +110,7 @@ function runSimulation() {
 
         if (allUp || allDown) {
             const sma50 = calculateSMA(closes.slice(0, i), CONFIG.smaPeriod);
-            const sma100 = calculateSMA(closes.slice(0, i), CONFIG.smaLongPeriod);
+            const sma200 = calculateSMA(closes.slice(0, i), CONFIG.smaLongPeriod);
             const rsi = calculateRSI(closes.slice(0, i), CONFIG.rsiPeriod);
             const atr = calculateATR(allCandles.slice(0, i), CONFIG.atrPeriod);
 
@@ -118,14 +118,10 @@ function runSimulation() {
             const candleRange = c.high - c.low;
             if (candleRange < atr * 0.6) continue;
 
-            if (sma50 && sma100 && rsi) {
-                const distPct = Math.abs(c.close - sma50) / sma50 * 100;
-
-                // --- SEÑAL MAESTRA ---
-                if (distPct < 0.08) {
-                    if (allUp && c.close > sma100 && rsi > 45) signal = 'MULTUP';
-                    if (allDown && c.close < sma100 && rsi < 55) signal = 'MULTDOWN';
-                }
+            if (sma200 && rsi) {
+                // --- SEÑAL AGRESIVA (SIN DISTANCIA) ---
+                if (allUp && c.close > sma200 && rsi > 45) signal = 'MULTUP';
+                if (allDown && c.close < sma200 && rsi < 55) signal = 'MULTDOWN';
             }
         }
 

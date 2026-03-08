@@ -218,7 +218,7 @@ app.post('/api/hybrid', (req, res) => {
 });
 
 app.post('/api/control', (req, res) => {
-    const { action, password, stake, takeProfit, multiplier, momentum, stopLoss, symbol } = req.body;
+    const { action, password, stake, takeProfit, multiplier, momentum, stopLoss, distLimit, symbol } = req.body;
 
     if (password !== WEB_PASSWORD) {
         return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
