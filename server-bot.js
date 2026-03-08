@@ -78,11 +78,17 @@ if (fs.existsSync(STATE_FILE)) {
         if (saved.SNIPER_CONFIG) SNIPER_CONFIG = { ...SNIPER_CONFIG, ...saved.SNIPER_CONFIG };
         if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
 
-        // FORZAMOS EL MERCADO A STEP INDEX (Garantía de cambio)
+        // --- RESET AGRESIVO A STEP INDEX (Override total) ---
         botState.activeSymbol = 'stpRNG';
         SYMBOL = 'stpRNG';
+        SNIPER_CONFIG.multiplier = 750;
+        SNIPER_CONFIG.momentum = 5;
+        SNIPER_CONFIG.stake = 20;
+        SNIPER_CONFIG.takeProfit = 3.00;
+        SNIPER_CONFIG.stopLoss = 1.50;
+        SNIPER_CONFIG.distLimit = 0.08;
 
-        console.log(`📦 ESTADO RECUPERADO: Estrategia=SNIPER | Mercado=${botState.activeSymbol} | Corriendo=${botState.isRunning}`);
+        console.log(`📦 ESTADO RECUPERADO Y OPTIMIZADO: Step Index activado con multiplicador 750.`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
