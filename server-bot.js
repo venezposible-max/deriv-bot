@@ -16,7 +16,7 @@ let SNIPER_CONFIG = {
     stake: 20,
     takeProfit: 3.00,  // 🎯 Meta Optimizada
     stopLoss: 1.50,    // 🛡️ SL Ultra-Corto (Ratio 2:1)
-    multiplier: 40,
+    multiplier: 750,
     smaPeriod: 50,
     smaLongPeriod: 200, // 🏛️ Filtro de Tendencia Mayor (MAESTRO)
     rsiPeriod: 14,
