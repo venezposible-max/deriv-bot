@@ -649,7 +649,7 @@ function connectDeriv() {
                             const isExplosion = move3 > (avgMove10 * 2.5); // Multiplicador Vortex
 
                             // --- FILTRO DE ENTRADA QUIRÚRGICA ---
-                            if (isExplosion) {
+                            if (isExplosion && distPct < SNIPER_CONFIG.distLimit) {
                                 if (allUp && quote > trendVortex && macd.current > macd.prev && rsi7 < 80) {
                                     direction = 'MULTUP';
                                     console.log(`🌀 VORTEX DETECTED: Disparando UP (Vol: ${move3.toFixed(3)} | RSI7: ${rsi7.toFixed(1)})`);
