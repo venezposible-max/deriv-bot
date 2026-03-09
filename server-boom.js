@@ -32,9 +32,13 @@ let botState = {
     totalTradesSession: 0,
     tradeHistory: [],
     balanceHistory: [],
+    activeContracts: [],
     currentContractId: null,
+    activeSymbol: 'BOOM1000',
+    activeStrategy: 'SNIPER',
     cooldownRemaining: 0,
-    lastScanLogTime: 0
+    lastScanLogTime: 0,
+    sessionDuration: 0
 };
 
 let tickHistory = [];
@@ -49,10 +53,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
     res.json({
-        ...botState,
-        symbol: SYMBOL,
+        success: true,
+        data: {
+            ...botState,
+            activeSymbol: SYMBOL,
+            activeStrategy: 'SNIPER'
+        },
         config: BOOM_CONFIG,
-        ticksLoaded: tickHistory.length
+        isSniper: true
     });
 });
 
@@ -60,6 +68,10 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`\n🚀 Iniciando Motor BOOM 1000 SNIPER...`);
     console.log(`🌍 Módulo Web en puerto ${PORT}`);
+
+    // --- CRONÓMETRO DE SESIÓN ---
+    setInterval(() => { if (botState.isRunning) botState.sessionDuration++; }, 1000);
+
     connectWebSocket();
 });
 
@@ -124,6 +136,13 @@ function connectWebSocket() {
 
         if (msg.msg_type === 'proposal_open_contract') {
             const contract = msg.proposal_open_contract;
+
+            // Actualizar contrato activo para la UI
+            if (contract && !contract.is_sold) {
+                botState.currentContractId = contract.contract_id;
+                botState.activeContracts = [contract];
+            }
+
             if (contract && contract.is_sold) {
                 finalizeTrade(contract);
             } else if (contract && !contract.is_sold) {
