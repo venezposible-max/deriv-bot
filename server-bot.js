@@ -150,6 +150,36 @@ function calculateRSI(prices, period = 14) {
     return 100 - (100 / (1 + rs));
 }
 
+function calculateEMA(prices, period) {
+    if (prices.length < period) return null;
+    let k = 2 / (period + 1);
+    let ema = 0;
+    // Semilla inicial con SMA
+    for (let i = 0; i < period; i++) ema += prices[i];
+    ema = ema / period;
+    // Aplicar fórmula EMA
+    for (let i = period; i < prices.length; i++) {
+        ema = (prices[i] * k) + (ema * (1 - k));
+    }
+    return ema;
+}
+
+function getMACD() {
+    if (tickHistory.length < 30) return null;
+    const ema12 = calculateEMA(tickHistory, 12);
+    const ema26 = calculateEMA(tickHistory, 26);
+    if (ema12 === null || ema26 === null) return null;
+
+    const currentMacd = ema12 - ema26;
+
+    // Simulación de señal rápida comparando con el estado anterior
+    const prevEma12 = calculateEMA(tickHistory.slice(0, -1), 12);
+    const prevEma26 = calculateEMA(tickHistory.slice(0, -1), 26);
+    const prevMacd = (prevEma12 !== null && prevEma26 !== null) ? (prevEma12 - prevEma26) : null;
+
+    return { current: currentMacd, prev: prevMacd };
+}
+
 let ws;
 let isBuying = false;
 let cooldownTime = 0;
@@ -619,15 +649,23 @@ function connectDeriv() {
                             for (let j = 1; j < last5.length; j++) volSum += Math.abs(last5[j] - last5[j - 1]);
                             const volOK = (volSum / 5) > 0.015;
 
-                            // SEÑAL SNIPER ELITE (Filtro 1min + Volatilidad + SMA + 0.12%)
-                            if (distPct < SNIPER_CONFIG.distLimit && volOK) {
+                            // 3. FILTRO PRO: MACD (Detector de Fuerza)
+                            const macd = getMACD();
+                            let macdStrong = false;
+                            if (macd) {
+                                if (allUp) macdStrong = macd.current > macd.prev;
+                                if (allDown) macdStrong = macd.current < macd.prev;
+                            }
+
+                            // SEÑAL SNIPER ELITE (Filtro 1min + Volatilidad + SMA + MACD)
+                            if (distPct < SNIPER_CONFIG.distLimit && volOK && macdStrong) {
                                 if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'UP') {
                                     direction = 'MULTUP';
-                                    console.log(`🎯 SNIPER ELITE: UP (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | Vol: ${(volSum / 5).toFixed(3)})`);
+                                    console.log(`🎯 SNIPER ELITE + MACD: UP (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | MACD: OK)`);
                                 }
                                 if (allDown && quote < trendMayor && rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'DOWN') {
                                     direction = 'MULTDOWN';
-                                    console.log(`🎯 SNIPER ELITE: DOWN (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | Vol: ${(volSum / 5).toFixed(3)})`);
+                                    console.log(`🎯 SNIPER ELITE + MACD: DOWN (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | MACD: OK)`);
                                 }
                             }
                         }
