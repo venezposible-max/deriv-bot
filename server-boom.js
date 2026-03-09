@@ -57,8 +57,10 @@ app.get('/', (req, res) => {
     const brandingScript = `
     <script>
         window.onload = () => {
-            const replaceText = () => {
+            const cleanUI = () => {
                 document.title = "BOOM 1000 SNIPER 💥"; 
+                
+                // 1. Reemplazo de Texto
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
                 let node;
                 while (node = walker.nextNode()) {
@@ -66,9 +68,24 @@ app.get('/', (req, res) => {
                         node.nodeValue = node.nodeValue.replace(/Step Index/g, 'BOOM 1000');
                     }
                 }
+
+                // 2. Ocultar Secciones innecesarias (Trailing, Híbrido, Alpha)
+                const keywords = ['TRAILING', 'HÍBRIDO', 'ALPHA'];
+                document.querySelectorAll('div, section, h2, h3, p, span').forEach(el => {
+                    keywords.forEach(key => {
+                        if (el.textContent && el.textContent.toUpperCase().includes(key)) {
+                            // Si es un contenedor o tiene el texto principal, lo ocultamos
+                            if (el.children.length === 0 || el.tagName.startsWith('H')) {
+                                // Subimos al padre que suele ser la tarjeta/sección
+                                let container = el.parentElement;
+                                if (container) container.style.display = 'none';
+                            }
+                        }
+                    });
+                });
             };
-            replaceText();
-            setInterval(replaceText, 2000); // Mantener el branding si React re-renderiza
+            cleanUI();
+            setInterval(cleanUI, 1000); 
         };
     </script>
     `;
@@ -255,6 +272,7 @@ function finalizeTrade(contract) {
     const profit = parseFloat(contract.profit);
     botState.pnlSession += profit;
     botState.totalTradesSession++;
+
     if (profit > 0) {
         botState.winsSession++;
         console.log(`🎯 ¡SPIKE CAZADO! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
@@ -263,13 +281,27 @@ function finalizeTrade(contract) {
         console.log(`🛡️ BALA PERDIDA: -$${Math.abs(profit).toFixed(2)} (Bajo control)`);
     }
 
+    // --- REGISTRO DE TRADING HISTORIAL (Máximo 10) ---
+    const now = new Date();
+    botState.tradeHistory.unshift({
+        id: contract.contract_id,
+        type: (contract.contract_type === 'MULTUP') ? 'BUY 🚀' : 'SELL ↘️',
+        profit: profit,
+        timestamp: now.toLocaleTimeString(),
+        duration: Math.floor((now.getTime() / 1000) - contract.date_start) + 's'
+    });
+    if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
+
     botState.currentContractId = null;
+    botState.activeContracts = [];
     botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds;
 
     const timer = setInterval(() => {
         if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
         else clearInterval(timer);
     }, 1000);
+
+    saveState();
 }
 
 function saveState() {
