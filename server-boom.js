@@ -143,8 +143,24 @@ function connectWebSocket() {
 
         if (msg.msg_type === 'authorize') {
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname}`);
+
+            // --- CALENTAMIENTO INSTANTÁNEO (WARM START) ---
+            console.log(`🚀 Solicitando historial de ticks para arranque inmediato...`);
+            ws.send(JSON.stringify({
+                ticks_history: SYMBOL,
+                count: 500,
+                end: 'latest',
+                style: 'ticks'
+            }));
+
             ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+        }
+
+        // --- MANEJO DE HISTORIAL PARA WARM START ---
+        if (msg.msg_type === 'history') {
+            tickHistory = msg.history.prices;
+            console.log(`📡 Memoria cargada instantáneamente: ${tickHistory.length} ticks. 🔥 SISTEMA LISTO.`);
         }
 
         if (msg.msg_type === 'balance') {

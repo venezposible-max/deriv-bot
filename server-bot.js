@@ -438,6 +438,16 @@ function connectDeriv() {
                 botState.startBalanceDay = botState.balance;
             }
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
+
+            // --- CALENTAMIENTO INSTANTÁNEO (WARM START) ---
+            console.log(`🚀 Solicitando historial de ticks para arranque inmediato...`);
+            ws.send(JSON.stringify({
+                ticks_history: SYMBOL,
+                count: 3000,
+                end: 'latest',
+                style: 'ticks'
+            }));
+
             // Limpiar suscripciones anteriores antes de crear nuevas
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             setTimeout(() => {
@@ -502,6 +512,12 @@ function connectDeriv() {
         if (msg.msg_type === 'balance') {
             botState.balance = msg.balance.balance;
             console.log(`💰 ACTUALIZACIÓN DE SALDO: $${botState.balance}`);
+        }
+
+        // --- MANEJO DE HISTORIAL PARA WARM START ---
+        if (msg.msg_type === 'history') {
+            tickHistory = msg.history.prices;
+            console.log(`📡 Memoria cargada instantáneamente: ${tickHistory.length} ticks. 🔥 SISTEMA LISTO.`);
         }
 
         if (msg.msg_type === 'tick') {
