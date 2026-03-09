@@ -844,7 +844,7 @@ function connectDeriv() {
                     if (botState.cooldownRemaining <= 0) {
                         botState.cooldownRemaining = 0;
                         clearInterval(timer);
-                        tickHistory = [];
+                        // tickHistory = []; // MEMORIA MANTENIDA PARA VORTEX 24/7
                     }
                 }, 1000);
             }
