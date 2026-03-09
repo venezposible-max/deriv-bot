@@ -4,24 +4,29 @@ const SYMBOL = 'frxXAUUSD';
 
 const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 let allTicks = [];
-const TOTAL_TICKS_NEEDED = 10000;
+const TOTAL_TICKS_NEEDED = 10000; // El oro tiene menos ticks, pedimos más historial
 
 const CONFIG = {
     stake: 20,
-    takeProfit: 5.00, // En Oro buscamos movimientos más grandes
-    stopLoss: 10.00,
-    multiplier: 500,
+    takeProfit: 2.00,
+    stopLoss: 3.00,
+    multiplier: 500, // Multiplicador estándar para Oro en Deriv
     latency: 1
 };
 
 ws.on('open', () => {
-    console.log(`\n📥 ANALIZANDO ESTRATEGIA "GOLD MASTER M5" (XAUUSD)...`);
-    console.log(`🧠 Lógica: Cruce de Medias Exponenciales (12/26) + RSI(14) Confirmación.`);
+    console.log(`\n📥 EJECUTANDO VORTEX 3-5 EN ORO (frxXAUUSD)...`);
+    console.log(`🧠 Filtros: Volatilidad Algorítmica + MACD + RSI Anti-Techo...`);
     fetchTicks();
 });
 
 function fetchTicks(beforeEpoch = 'latest') {
-    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: beforeEpoch || 'latest', count: 5000, style: 'ticks' }));
+    ws.send(JSON.stringify({
+        ticks_history: SYMBOL,
+        end: beforeEpoch || 'latest',
+        count: 5000,
+        style: 'ticks'
+    }));
 }
 
 ws.on('message', (data) => {
@@ -30,12 +35,13 @@ ws.on('message', (data) => {
         const chunk = msg.history.prices || [];
         const times = msg.history.times || [];
         allTicks = [...chunk, ...allTicks];
+
         if (allTicks.length < TOTAL_TICKS_NEEDED && chunk.length > 0) {
             process.stdout.write('.');
             fetchTicks(times[0]);
         } else {
-            console.log(`\n✅ DATA CARGADA (${allTicks.length} ticks). Procesando estrategia M5...`);
-            runGoldMasterBacktest();
+            console.log(`\n✅ DATA CARGADA (${allTicks.length} ticks). Iniciando procesamiento...`);
+            runVortexBacktest();
             ws.close();
         }
     }
@@ -49,6 +55,11 @@ function calculateEMA(prices, period) {
     return ema;
 }
 
+function calculateSMA(prices, period) {
+    if (prices.length < period) return null;
+    return prices.slice(-period).reduce((a, b) => a + b, 0) / period;
+}
+
 function calculateRSI(prices, period) {
     if (prices.length < period + 1) return 50;
     let gains = 0, losses = 0;
@@ -60,33 +71,49 @@ function calculateRSI(prices, period) {
     return 100 - (100 / (1 + rs));
 }
 
-function runGoldMasterBacktest() {
+function getMACD(prices) {
+    if (prices.length < 60) return null;
+    const ema12 = calculateEMA(prices, 12);
+    const ema26 = calculateEMA(prices, 26);
+    if (ema12 === null || ema26 === null) return null;
+    const currentMacd = ema12 - ema26;
+    const prevEma12 = calculateEMA(prices.slice(0, -1), 12);
+    const prevEma26 = calculateEMA(prices.slice(0, -1), 26);
+    const prevMacd = (prevEma12 !== null && prevEma26 !== null) ? (prevEma12 - prevEma26) : null;
+    return { current: currentMacd, prev: prevMacd };
+}
+
+function runVortexBacktest() {
     let balance = 0, wins = 0, losses = 0, trades = 0;
     let inTrade = false, entryPrice = 0, tradeType = null;
+    const SMA_LONG = 500; // En oro los movimientos son más lentos, bajamos la ventana de tendencia
 
-    // El oro requiere una visión de más largo plazo
-    // Usamos EMA 12 y EMA 26 para detectar el cruce de tendencia (Famoso en trading de oro)
-    const EMA_FAST = 12;
-    const EMA_SLOW = 26;
-
-    for (let i = 200; i < allTicks.length - 100; i++) {
+    for (let i = SMA_LONG; i < allTicks.length - 100; i++) {
         const quote = allTicks[i];
 
         if (!inTrade) {
-            const ema12 = calculateEMA(allTicks.slice(0, i), EMA_FAST);
-            const ema26 = calculateEMA(allTicks.slice(0, i), EMA_SLOW);
-            const rsi = calculateRSI(allTicks.slice(i - 100, i), 14);
+            const trend = calculateSMA(allTicks.slice(0, i), SMA_LONG);
+            if (!trend) continue;
 
-            if (!ema12 || !ema26) continue;
+            const move3 = Math.abs(allTicks[i] - allTicks[i - 3]);
+            let sumPrevDiffs = 0;
+            for (let j = i - 12; j < i - 3; j++) sumPrevDiffs += Math.abs(allTicks[j] - allTicks[j - 1]);
+            const avgMove10 = sumPrevDiffs / 10;
+
+            // Oro tiene menos volatilidad que Step Index, bajamos el umbral
+            const isExplosion = move3 > (avgMove10 * 1.8);
+
+            const rsi7 = calculateRSI(allTicks.slice(i - 40, i), 7);
+            const macd = getMACD(allTicks.slice(0, i));
 
             let direction = null;
+            const last3 = allTicks.slice(i - 3, i);
+            const allUp = last3.every((v, k) => k === 0 || v > last3[k - 1]);
+            const allDown = last3.every((v, k) => k === 0 || v < last3[k - 1]);
 
-            // LÓGICA GOLD ESCALADOR:
-            // Cruce de EMAs + RSI confirmando que no hay sobre-extensión
-            if (ema12 > ema26 && rsi > 55 && rsi < 70) {
-                direction = 'UP';
-            } else if (ema12 < ema26 && rsi < 45 && rsi > 30) {
-                direction = 'DOWN';
+            if (isExplosion && macd && macd.prev !== null) {
+                if (allUp && quote > trend && macd.current > macd.prev && rsi7 < 80) direction = 'UP';
+                else if (allDown && quote < trend && macd.current < macd.prev && rsi7 > 20) direction = 'DOWN';
             }
 
             if (direction) {
@@ -94,30 +121,29 @@ function runGoldMasterBacktest() {
                 tradeType = direction;
                 entryPrice = allTicks[i + CONFIG.latency];
                 trades++;
-                i += 50; // Evitamos multi-entradas en la misma zona
+                i += CONFIG.latency;
             }
         } else {
             let priceChangePct = (quote - entryPrice) / entryPrice;
             if (tradeType === 'DOWN') priceChangePct = -priceChangePct;
             const profit = priceChangePct * CONFIG.multiplier * CONFIG.stake;
 
-            // En Oro el TP/SL debe ser más holgado para dejar respirar al metal
             if (profit >= CONFIG.takeProfit) {
                 balance += CONFIG.takeProfit;
                 wins++;
                 inTrade = false;
-                i += 100; // Cooldown forzado para esperar nueva estructura
+                i += 10; // Cooldown
             } else if (profit <= -CONFIG.stopLoss) {
                 balance -= CONFIG.stopLoss;
                 losses++;
                 inTrade = false;
-                i += 100;
+                i += 10;
             }
         }
     }
 
     console.log("\n=========================================");
-    console.log("🏆 RESULTADO ESTRATEGIA: GOLD MASTER M5");
+    console.log("🕵️‍♂️ RESULTADO VORTEX 3-5 : ORO (XAUUSD)");
     console.log("=========================================");
     console.log(`PnL Neto ($): ${balance.toFixed(2)}`);
     console.log(`Win Rate: ${((wins / (trades || 1)) * 100).toFixed(1)}%`);
