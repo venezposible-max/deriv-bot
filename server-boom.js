@@ -10,6 +10,7 @@ const fs = require('fs');
 const APP_ID = 1089;
 const SYMBOL = 'BOOM1000'; // El Rey de las Explosiones
 const STATE_FILE = path.join(__dirname, 'persistent-state-boom.json');
+const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
 
 // --- ESTRATEGIA: SNIPER DE SPIKES (Seguro para $85) ---
 let BOOM_CONFIG = {
@@ -105,6 +106,68 @@ app.get('/api/status', (req, res) => {
         config: BOOM_CONFIG,
         isSniper: true
     });
+});
+
+// --- ENDPOINT: CONTROL REMOTO (START/STOP/CONFIG) ---
+app.post('/api/control', (req, res) => {
+    const { action, password, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
+
+    if (password !== WEB_PASSWORD) {
+        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    }
+
+    if (action === 'START') {
+        botState.isRunning = true;
+        if (stake) BOOM_CONFIG.stake = Number(stake);
+        if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
+        if (multiplier) BOOM_CONFIG.multiplier = Number(multiplier);
+        if (stopLoss) BOOM_CONFIG.stopLoss = Number(stopLoss);
+        if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
+
+        saveState();
+        console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode`);
+        return res.json({ success: true, message: 'Bot Boom Sniper Activado', isRunning: true });
+    }
+
+    if (action === 'STOP') {
+        botState.isRunning = false;
+        saveState();
+        console.log(`⏸️ BOT BOOM 1000 DETENIDO.`);
+        return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
+    }
+
+    if (action === 'FORCE_CLEAR') {
+        botState.currentContractId = null;
+        botState.activeContracts = [];
+        isBuying = false;
+        saveState();
+        return res.json({ success: true, message: 'Trades de Boom limpiados' });
+    }
+
+    res.status(400).json({ success: false, error: 'Acción inválida' });
+});
+
+// --- ENDPOINT: TRADES MANUALES ---
+app.post('/api/trade', (req, res) => {
+    const { action, password } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación activa.' });
+
+    if (action === 'MULTUP' || action === 'MULTDOWN' || action === 'CALL' || action === 'PUT') {
+        executeTrade(); // En Boom solo usamos MULTUP para spikes
+        return res.json({ success: true, message: `Disparo manual enviado a BOOM 1000` });
+    }
+});
+
+// --- ENDPOINT: CIERRE MANUAL ---
+app.post('/api/close', (req, res) => {
+    const { password, contractId } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    const idToClose = contractId || botState.currentContractId;
+    if (!idToClose) return res.status(400).json({ success: false, error: 'No hay nada que cerrar.' });
+
+    ws.send(JSON.stringify({ sell: idToClose, price: 0 }));
+    return res.json({ success: true, message: 'Orden de venta enviada' });
 });
 
 const PORT = process.env.PORT || 8080;
