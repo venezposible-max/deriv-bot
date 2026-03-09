@@ -221,6 +221,22 @@ function connectWebSocket() {
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
 
+        if (msg.error) {
+            const errMsg = (msg.error.message || '').toLowerCase();
+            console.error(`⚠️ Error en BOOM: ${msg.error.message}`);
+            isBuying = false;
+
+            if (errMsg.includes('100 contracts') || errMsg.includes('more than 100')) {
+                console.log('🛑 LÍMITE ALCANZADO: Tienes 100+ contratos abiertos. Pausando disparos 2 min.');
+                botState.cooldownRemaining = 120;
+                const timer = setInterval(() => {
+                    if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
+                    else clearInterval(timer);
+                }, 1000);
+            }
+            return;
+        }
+
         if (msg.msg_type === 'authorize') {
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname}`);
 

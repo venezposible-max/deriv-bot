@@ -406,11 +406,25 @@ function connectDeriv() {
             // Ignorar errores de suscripción duplicada — son parte normal del ciclo de re-suscripción
             const isBenign = errMsg.includes('already subscribed') ||
                 errMsg.includes('unrecognised request');
+
             if (!isBenign) {
-                console.error(`⚠️ Error: ${msg.error.message}`);
+                console.error(`⚠️ Error de Deriv: ${msg.error.message}`);
             }
+
+            // --- PROTECCIÓN CONTRA EL LÍMITE DE 100 CONTRATOS ---
+            if (errMsg.includes('100 contracts') || errMsg.includes('more than 100')) {
+                console.log('🛑 LÍMITE ALCANZADO: Tienes 100 o más contratos abiertos en tu cuenta. Activando Cooldown de Seguridad (120s).');
+                botState.cooldownRemaining = 120; // 2 minutos de calma
+                const timer = setInterval(() => {
+                    if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
+                    else clearInterval(timer);
+                }, 1000);
+            }
+
             botState.connectionError = isBenign ? null : msg.error.message;
-            isBuying = false;
+
+            // Si es un error real, esperamos 2 segundos antes de permitir otra compra
+            setTimeout(() => { isBuying = false; }, 2000);
 
             // --- AUTO-CLEAN GHOST TRADES ON ERROR ---
             if (errMsg.includes('expired') ||
