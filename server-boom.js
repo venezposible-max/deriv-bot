@@ -49,6 +49,32 @@ let isBuying = false;
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// --- DINAMIC BRANDING: BOOM 1000 ---
+app.get('/', (req, res) => {
+    let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+    // Inyectamos un script al final del body para cambiar el branding
+    const brandingScript = `
+    <script>
+        window.onload = () => {
+            const replaceText = () => {
+                document.title = "BOOM 1000 SNIPER 💥"; 
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                let node;
+                while (node = walker.nextNode()) {
+                    if (node.nodeValue.includes('Step Index')) {
+                        node.nodeValue = node.nodeValue.replace(/Step Index/g, 'BOOM 1000');
+                    }
+                }
+            };
+            replaceText();
+            setInterval(replaceText, 2000); // Mantener el branding si React re-renderiza
+        };
+    </script>
+    `;
+    res.send(html.replace('</body>', brandingScript + '</body>'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
