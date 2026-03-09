@@ -518,7 +518,7 @@ function connectDeriv() {
             botState.lastTickUpdate = nowMs;
 
             tickHistory.push(quote);
-            if (tickHistory.length > 200) tickHistory.shift();
+            if (tickHistory.length > 3000) tickHistory.shift(); // Aumentado para SMA 2000 (Vortex)
 
             // --- MONITOR ULTRA-RÁPIDO DE TRADES ACTIVOS (TICK-BY-TICK) ---
             if (botState.currentContractId && botState.isRunning) {
@@ -631,48 +631,39 @@ function connectDeriv() {
                             }
                         }
                     } else {
-                        const sma50 = calculateSMA(tickHistory, SNIPER_CONFIG.smaPeriod);
-                        const trendMayor = calculateSMA(tickHistory, SNIPER_CONFIG.smaLongPeriod);
-                        const rsi = calculateRSI(tickHistory, SNIPER_CONFIG.rsiPeriod);
+                        const trendVortex = calculateSMA(tickHistory, 2000);
+                        const rsi7 = calculateRSI(tickHistory, 7);
+                        const macd = getMACD();
 
-                        if (sma50 && trendMayor && rsi) {
-                            const distPct = Math.abs(quote - sma50) / sma50 * 100;
+                        if (trendVortex && rsi7 && macd && macd.prev !== null) {
+                            const distPct = Math.abs(quote - trendVortex) / trendVortex * 100;
 
-                            // 📡 EXTRAS DE PRECISIÓN (OCP)
-                            // 1. Tendencia 1 Minuto (Lookback 60 ticks)
-                            const price1m = tickHistory[tickHistory.length - 60] || tickHistory[0];
-                            const trend1m = quote > price1m ? 'UP' : 'DOWN';
-
-                            // 2. Filtro Volatilidad (ATR-5) para evitar ruido
-                            const last5 = tickHistory.slice(-5);
-                            let volSum = 0;
-                            for (let j = 1; j < last5.length; j++) volSum += Math.abs(last5[j] - last5[j - 1]);
-                            const volOK = (volSum / 5) > 0.015;
-
-                            // 3. FILTRO PRO: MACD (Detector de Fuerza)
-                            const macd = getMACD();
-                            let macdStrong = false;
-                            if (macd) {
-                                if (allUp) macdStrong = macd.current > macd.prev;
-                                if (allDown) macdStrong = macd.current < macd.prev;
+                            // --- DETECTOR DE EXPLOSIÓN VORTEX (3 ticks vs 10 previos) ---
+                            const move3 = Math.abs(tickHistory[tickHistory.length - 1] - tickHistory[tickHistory.length - 4]);
+                            let sumPrevDiffs = 0;
+                            const startIdx = tickHistory.length - 13;
+                            for (let j = startIdx; j < tickHistory.length - 4; j++) {
+                                sumPrevDiffs += Math.abs(tickHistory[j + 1] - tickHistory[j]);
                             }
+                            const avgMove10 = sumPrevDiffs / 9;
+                            const isExplosion = move3 > (avgMove10 * 2.5); // Multiplicador Vortex
 
-                            // SEÑAL SNIPER ELITE (Filtro 1min + Volatilidad + SMA + MACD)
-                            if (distPct < SNIPER_CONFIG.distLimit && volOK && macdStrong) {
-                                if (allUp && quote > trendMayor && rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'UP') {
+                            // --- FILTRO DE ENTRADA QUIRÚRGICA ---
+                            if (isExplosion) {
+                                if (allUp && quote > trendVortex && macd.current > macd.prev && rsi7 < 80) {
                                     direction = 'MULTUP';
-                                    console.log(`🎯 SNIPER ELITE + MACD: UP (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | MACD: OK)`);
+                                    console.log(`🌀 VORTEX DETECTED: Disparando UP (Vol: ${move3.toFixed(3)} | RSI7: ${rsi7.toFixed(1)})`);
                                 }
-                                if (allDown && quote < trendMayor && rsi > SNIPER_CONFIG.rsiLow && rsi < SNIPER_CONFIG.rsiHigh && trend1m === 'DOWN') {
+                                if (allDown && quote < trendVortex && macd.current < macd.prev && rsi7 > 20) {
                                     direction = 'MULTDOWN';
-                                    console.log(`🎯 SNIPER ELITE + MACD: DOWN (Dist: ${distPct.toFixed(3)}% | RSI: ${rsi.toFixed(1)} | MACD: OK)`);
+                                    console.log(`🌀 VORTEX DETECTED: Disparando DOWN (Vol: ${move3.toFixed(3)} | RSI7: ${rsi7.toFixed(1)})`);
                                 }
                             }
                         }
                     }
-                }
 
-                if (direction) executeTrade(direction);
+                    if (direction) executeTrade(direction);
+                }
             }
         }
         // --- MANEJO DE HISTORIAL DE VELAS ---
