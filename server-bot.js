@@ -589,10 +589,10 @@ function connectDeriv() {
                 // Log de Escaneo (Cada 30 segundos para no saturar)
                 const now = Date.now();
                 if (now - botState.lastScanLogTime > 30000) {
-                    const tempSma = calculateSMA(tickHistory, currentConfig.smaPeriod);
-                    const tempRsi = calculateRSI(tickHistory, currentConfig.rsiPeriod);
-                    const distStr = tempSma ? `${(Math.abs(quote - tempSma) / tempSma * 100).toFixed(3)}%` : '---';
-                    console.log(`🔍 ESCANEANDO [${SYMBOL}]: RSI: ${tempRsi?.toFixed(1) || '--'} | Distancia: ${distStr} | Modo: ${currentConfig.useHybrid ? 'HÍBRIDO' : 'STÁNDAR'}`);
+                    const trendVortex = calculateSMA(tickHistory, 2000);
+                    const rsi7 = calculateRSI(tickHistory, 7);
+                    const distStr = trendVortex ? `${(Math.abs(quote - trendVortex) / trendVortex * 100).toFixed(3)}%` : `Cargando Memoria (${tickHistory.length}/2000)`;
+                    console.log(`🔍 VORTEX SCAN [${SYMBOL}]: RSI7: ${rsi7?.toFixed(1) || '--'} | Dist: ${distStr} | Memoria: ${tickHistory.length >= 2000 ? 'LISTO ✅' : '⚡ Llenando...'}`);
                     botState.lastScanLogTime = now;
                 }
 
