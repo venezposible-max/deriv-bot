@@ -25,7 +25,7 @@ let BOOM_CONFIG = {
 };
 
 let botState = {
-    isRunning: true,
+    isRunning: false, // PARADA DE EMERGENCIA POR DEFECTO
     balance: 0,
     pnlSession: 0,
     winsSession: 0,
@@ -344,7 +344,8 @@ function executeTrade() {
     // Registrar el índice del tick de entrada para el Time-Stop
     botState.entryTickIdx = tickHistory.length;
 
-    setTimeout(() => { isBuying = false; }, 2000);
+    // BLOQUEO EXTENDIDO: No permitir disparos en ráfaga (10 segundos de protección)
+    setTimeout(() => { isBuying = false; }, 10000);
 }
 
 function finalizeTrade(contract) {
