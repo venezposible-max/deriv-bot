@@ -4,14 +4,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GOLD INSTITUTIONAL SNIPER 🥇</title>
+  <title>SILVER INSTITUTIONAL SNIPER 🥈</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap"
     rel="stylesheet">
   <style>
     :root {
-      --gold: #D4AF37;
-      --gold-bright: #FFD700;
+      --gold: #A8A9AD;
+      --gold-bright: #E5E4E2;
       --dark-bg: #0a0a0c;
       --card-bg: rgba(255, 255, 255, 0.05);
       --green: #00ff88;
@@ -303,7 +303,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>GOLD SNIPER GIB 🥇</h1>
+      <h1>SILVER SNIPER GIB 🥈</h1>
       <div class="subtitle">ESTRATEGIA INSTITUCIONAL W/M PATTERN</div>
     </header>
 
@@ -348,7 +348,7 @@
         </div>
       </div>
 
-      <button id="toggle-btn" class="btn btn-start">Iniciar Bot Oro</button>
+      <button id="toggle-btn" class="btn btn-start">Iniciar Bot Plata</button>
 
       <div class="manual-buttons">
         <button onclick="manualTrade('MULTUP')" class="btn btn-buy" id="manual-up">Manual UP</button>
@@ -406,7 +406,7 @@
         statusEl.className = `status-value ${isRunning ? 'green' : 'red'}`;
 
         const toggleBtn = document.getElementById('toggle-btn');
-        toggleBtn.textContent = isRunning ? 'Detener Bot Oro' : 'Iniciar Bot Oro';
+        toggleBtn.textContent = isRunning ? 'Detener Bot Plata' : 'Iniciar Bot Plata';
         toggleBtn.className = isRunning ? 'btn btn-stop' : 'btn btn-start';
 
         // Locking
@@ -455,7 +455,7 @@
         item.className = 'history-item';
         const profit = parseFloat(h.profit);
         item.innerHTML = `
-                    <span>${h.timestamp} - Gold ${h.type}</span>
+                    <span>${h.timestamp} - Silver ${h.type}</span>
                     <span class="tag ${profit > 0 ? 'won' : 'lost'}">${profit > 0 ? 'WON' : 'LOST'} $${Math.abs(profit).toFixed(2)}</span>
                 `;
         list.appendChild(item);

@@ -8,7 +8,7 @@ const fs = require('fs');
 // CONFIGURACIÓN DEL BOT - MULTI-ESTRATEGIA
 // ==========================================
 const APP_ID = 1089;
-let SYMBOL = 'frxXAUUSD'; // Oro (XAUUSD) - Estrategia GIB W/M
+let SYMBOL = 'frxXAGUSD'; // Plata (XAGUSD) - Estrategia GIB W/M
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
 // --- CONFIGURACIÓN DE ESTRATEGIA UNIFICADA (SNIPER PRO - TÉCNICA MAESTRA) ---
@@ -46,7 +46,7 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     pnlSession: 0,
-    activeSymbol: 'frxXAUUSD', // Símbolo activo (Oro)
+    activeSymbol: 'frxXAGUSD', // Símbolo activo (Plata)
     currentContractId: null,
     currentMaxProfit: 0,
     lastSlAssigned: -12,
@@ -71,7 +71,7 @@ let botState = {
     useHybrid: false,
     lastScanLogTime: 0,
     isReversing: false,
-    activeStrategyName: 'GOLD INSTITUTIONAL GIB'
+    activeStrategyName: 'SILVER INSTITUTIONAL GIB'
 };
 
 // --- CARGAR ESTADO ---
@@ -84,14 +84,14 @@ if (fs.existsSync(STATE_FILE)) {
         }
         if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
 
-        // --- OPTIMIZACIÓN PARA ORO (Garantía de símbolos) ---
-        botState.activeSymbol = 'frxXAUUSD';
-        SYMBOL = 'frxXAUUSD';
+        // --- OPTIMIZACIÓN PARA PLATA (Garantía de símbolos) ---
+        botState.activeSymbol = 'frxXAGUSD';
+        SYMBOL = 'frxXAGUSD';
 
         // Aseguramos multiplicador mínimo de 750 si es menor (por seguridad en Step Index)
         if (SNIPER_CONFIG.multiplier < 750) SNIPER_CONFIG.multiplier = 750;
 
-        console.log(`📦 ESTADO RECUPERADO: ORO INSTITUTIONAL listo. Stop Loss Actual: $${SNIPER_CONFIG.stopLoss}`);
+        console.log(`📦 ESTADO RECUPERADO: PLATA INSTITUTIONAL listo. Stop Loss Actual: $${SNIPER_CONFIG.stopLoss}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -188,7 +188,7 @@ let isBuying = false;
 let cooldownTime = 0;
 let tickHistory = [];
 let candleHistory = []; // Velas M1
-let candleHistoryM5 = []; // Velas M5 para ORO Institutional
+let candleHistoryM5 = []; // Velas M5 para PLATA Institutional
 let candleHistoryH1 = []; // Velas H1 para filtro MTF
 
 console.log('🚀 Iniciando Servidor Multi-Estrategia 24/7...');
@@ -270,7 +270,7 @@ app.post('/api/control', (req, res) => {
     }
 
     // --- CAMBIO DE SÍMBOLO ---
-    if (symbol && (symbol === 'R_100' || symbol === 'frxXAUUSD' || symbol === 'stpRNG')) {
+    if (symbol && (symbol === 'R_100' || symbol === 'frxXAUUSD' || symbol === 'frxXAGUSD' || symbol === 'stpRNG')) {
         if (botState.isRunning && botState.activeSymbol !== symbol) {
             return res.status(400).json({ success: false, error: "Detén el bot para cambiar de mercado." });
         }
@@ -288,13 +288,13 @@ app.post('/api/control', (req, res) => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
-                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para ORO GIB
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para PLATA GIB
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                 }
             }, 400);
         }
 
-        const marketName = symbol === 'stpRNG' ? 'Step Index' : (symbol === 'R_100' ? 'V100' : 'Oro');
+        const marketName = symbol === 'stpRNG' ? 'Step Index' : (symbol === 'R_100' ? 'V100' : (symbol === 'frxXAUUSD' ? 'Oro' : 'Plata'));
         return res.json({ success: true, message: `Mercado cambiado a ${marketName}` });
     }
 
@@ -486,7 +486,7 @@ function connectDeriv() {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     // Siempre pedir historial de velas para filtros de precisión inmediatos
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
-                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para ORO GIB
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para PLATA GIB
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
@@ -526,7 +526,8 @@ function connectDeriv() {
 
             // 2. ADOPCIÓN: Añadir trades que existen en Deriv pero no en el bot
             derivContracts.forEach(c => {
-                const isCorrectSymbol = c.symbol === SYMBOL || (SYMBOL === 'frxXAUUSD' && c.symbol.includes('XAUUSD'));
+                const isCorrectSymbol = c.symbol === SYMBOL ||
+                    ((SYMBOL === 'frxXAUUSD' || SYMBOL === 'frxXAGUSD') && c.symbol.includes(SYMBOL.replace('frx', '')));
                 if (isCorrectSymbol && !c.expiry_time && !botState.activeContracts.find(ac => ac.id === c.contract_id)) {
                     console.log(`📥 ADOPTando trade de Deriv: ${c.contract_id}`);
                     botState.activeContracts.push({ id: c.contract_id, profit: 0 });
@@ -622,8 +623,8 @@ function connectDeriv() {
             const nowDate = new Date();
             const hour = nowDate.getUTCHours();
 
-            // Evaluamos la sesión solo para ORO, el Volatility 100 es 24/7.
-            const isInsideSession = (SYMBOL === 'frxXAUUSD') ? (hour >= 11 && hour <= 21) : true;
+            // Evaluamos la sesión solo para ORO/PLATA, el Volatility 100 es 24/7.
+            const isInsideSession = (SYMBOL === 'frxXAUUSD' || SYMBOL === 'frxXAGUSD') ? (hour >= 11 && hour <= 21) : true;
 
             // --- LÓGICA SNIPER PRO (ÚNICA) ---
             if (botState.isRunning && botState.activeStrategy === 'SNIPER' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
@@ -674,8 +675,8 @@ function connectDeriv() {
                                 if (allDown && rsi < 25) { direction = 'MULTUP'; console.log(`⚔️ MODO ALPHA: Sobre-extensión detectada (RSI: ${rsi.toFixed(1)}). Disparando REVERSIÓN.`); }
                             }
                         }
-                    } else if (SYMBOL === 'frxXAUUSD') {
-                        // --- ESTRATEGIA EXCLUSIVA ORO: INSTITUTIONAL GIB (W/M PATTERN) ---
+                    } else if (SYMBOL === 'frxXAGUSD') {
+                        // --- ESTRATEGIA EXCLUSIVA PLATA: INSTITUTIONAL GIB (W/M PATTERN) ---
                         if (candleHistoryM5 && candleHistoryM5.length >= 40) {
                             let pivotsL = [], pivotsH = [];
                             // Escaneo de Pivotes M5 (Últimas 40 velas)
@@ -790,7 +791,7 @@ function connectDeriv() {
             }
 
             if (candle.granularity === 300) {
-                // MANEJO VELAS M5 (Oro GIB)
+                // MANEJO VELAS M5 (Plata GIB)
                 if (candleHistoryM5.length > 0 && candleHistoryM5[candleHistoryM5.length - 1].epoch === candle.epoch) {
                     candleHistoryM5[candleHistoryM5.length - 1] = entry;
                 } else {
