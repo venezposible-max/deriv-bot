@@ -288,7 +288,7 @@ app.post('/api/control', (req, res) => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
-                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para PLATA GIB
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para ESTRATEGIA GIB
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                 }
             }, 400);
@@ -486,7 +486,7 @@ function connectDeriv() {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     // Siempre pedir historial de velas para filtros de precisión inmediatos
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
-                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para PLATA GIB
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para ESTRATEGIA GIB
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
@@ -623,8 +623,8 @@ function connectDeriv() {
             const nowDate = new Date();
             const hour = nowDate.getUTCHours();
 
-            // Evaluamos la sesión solo para ORO/PLATA, el Volatility 100 es 24/7.
-            const isInsideSession = (SYMBOL === 'frxXAUUSD' || SYMBOL === 'frxXAGUSD') ? (hour >= 11 && hour <= 21) : true;
+            // MODO PRUEBA: Operación 24/7 para ver mecánica completa del bot.
+            const isInsideSession = true;
 
             // --- LÓGICA SNIPER PRO (ÚNICA) ---
             if (botState.isRunning && botState.activeStrategy === 'SNIPER' && !botState.currentContractId && botState.cooldownRemaining === 0 && !isBuying && !botState.isLockedByDrawdown && isInsideSession) {
@@ -675,8 +675,8 @@ function connectDeriv() {
                                 if (allDown && rsi < 25) { direction = 'MULTUP'; console.log(`⚔️ MODO ALPHA: Sobre-extensión detectada (RSI: ${rsi.toFixed(1)}). Disparando REVERSIÓN.`); }
                             }
                         }
-                    } else if (SYMBOL === 'frxXAGUSD') {
-                        // --- ESTRATEGIA EXCLUSIVA PLATA: INSTITUTIONAL GIB (W/M PATTERN) ---
+                    } else if (SYMBOL === 'frxXAGUSD' || SYMBOL === 'frxXAUUSD') {
+                        // --- ESTRATEGIA INSTITUTIONAL GIB (W/M PATTERN) ---
                         if (candleHistoryM5 && candleHistoryM5.length >= 40) {
                             let pivotsL = [], pivotsH = [];
                             // Escaneo de Pivotes M5 (Últimas 40 velas)
