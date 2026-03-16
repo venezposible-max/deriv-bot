@@ -763,11 +763,12 @@ function connectDeriv() {
                 }
             }
         }
-        // --- MANEJO DE HISTORIAL DE VELAS ---
+        // --- MANEJO DE HISTORIAL DE VELAS (Multi-Temporalidad) ---
         if (msg.msg_type === 'history' || msg.msg_type === 'candles') {
             const sym = msg.echo_req.ticks_history;
             if (sym !== SYMBOL) return;
 
+            const granularity = msg.echo_req.granularity || 60;
             const candles = msg.candles || (msg.history ? msg.history.times.map((t, i) => ({
                 epoch: t,
                 open: msg.history.prices[i],
@@ -776,8 +777,16 @@ function connectDeriv() {
                 close: msg.history.prices[i]
             })) : []);
 
-            candleHistory = candles;
-            console.log(`📊 Velas cargadas [${SYMBOL}]: ${candleHistory.length}`);
+            if (granularity === 3600) {
+                candleHistoryH1 = candles;
+                console.log(`📊 Historial H1 cargado [${SYMBOL}]: ${candleHistoryH1.length} velas`);
+            } else if (granularity === 300) {
+                candleHistoryM5 = candles;
+                console.log(`📊 Historial M5 cargado [${SYMBOL}]: ${candleHistoryM5.length} velas (LISTO PARA GIB)`);
+            } else {
+                candleHistory = candles;
+                console.log(`📊 Historial M1 cargado [${SYMBOL}]: ${candleHistory.length} velas (LISTO PARA SNIPER)`);
+            }
         }
 
         if (msg.msg_type === 'ohlc') {
