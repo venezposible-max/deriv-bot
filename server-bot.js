@@ -631,13 +631,17 @@ function connectDeriv() {
                 let direction = null;
                 const currentConfig = SNIPER_CONFIG;
 
-                // Log de Escaneo (Cada 30 segundos para no saturar)
+                // Log de Escaneo Estratégico (Cada 30 segundos)
                 const now = Date.now();
                 if (now - botState.lastScanLogTime > 30000) {
-                    const trendVortex = calculateSMA(tickHistory, 2000);
-                    const rsi7 = calculateRSI(tickHistory, 7);
-                    const distStr = trendVortex ? `${(Math.abs(quote - trendVortex) / trendVortex * 100).toFixed(3)}%` : `Cargando Memoria (${tickHistory.length}/2000)`;
-                    console.log(`🔍 VORTEX SCAN [${SYMBOL}]: RSI7: ${rsi7?.toFixed(1) || '--'} | Dist: ${distStr} | Memoria: ${tickHistory.length >= 2000 ? 'LISTO ✅' : '⚡ Llenando...'}`);
+                    if (SYMBOL === 'frxXAGUSD' || SYMBOL === 'frxXAUUSD') {
+                        console.log(`🔍 ESTRUCTURA SCAN [${SYMBOL}]: Analizando Pivotes M5 (Estrategia GIB)... | Memoria: ${tickHistory.length >= 2000 ? 'OK' : tickHistory.length}`);
+                    } else {
+                        const trendVortex = calculateSMA(tickHistory, 2000);
+                        const rsi7 = calculateRSI(tickHistory, 7);
+                        const distStr = trendVortex ? `${(Math.abs(quote - trendVortex) / trendVortex * 100).toFixed(3)}%` : `Cargando...`;
+                        console.log(`🔍 VORTEX SCAN [${SYMBOL}]: RSI7: ${rsi7?.toFixed(1) || '--'} | Dist: ${distStr}`);
+                    }
                     botState.lastScanLogTime = now;
                 }
 
@@ -696,7 +700,7 @@ function connectDeriv() {
                                     let tpAmt = (SNIPER_CONFIG.takeProfit > 0) ? SNIPER_CONFIG.takeProfit : slAmt * 2;
                                     if (slAmt >= SNIPER_CONFIG.stake) slAmt = SNIPER_CONFIG.stake * 0.95;
                                     direction = 'MULTUP';
-                                    console.log(`🥇 GOLD W-PATTERN: Higher Low detectado (${l2} > ${l1}). Disparando Breakout!`);
+                                    console.log(`🥈 SILVER W-PATTERN: Higher Low detectado (${l2} > ${l1}). Disparando Breakout!`);
                                     executeTrade(direction, parseFloat(tpAmt.toFixed(2)), parseFloat(slAmt.toFixed(2)));
                                     direction = null; // Mark handled
                                 }
@@ -711,7 +715,7 @@ function connectDeriv() {
                                     let tpAmt = (SNIPER_CONFIG.takeProfit > 0) ? SNIPER_CONFIG.takeProfit : slAmt * 2;
                                     if (slAmt >= SNIPER_CONFIG.stake) slAmt = SNIPER_CONFIG.stake * 0.95;
                                     direction = 'MULTDOWN';
-                                    console.log(`🥇 GOLD M-PATTERN: Lower High detectado (${h2} < ${h1}). Disparando Breakout!`);
+                                    console.log(`🥈 SILVER M-PATTERN: Lower High detectado (${h2} < ${h1}). Disparando Breakout!`);
                                     executeTrade(direction, parseFloat(tpAmt.toFixed(2)), parseFloat(slAmt.toFixed(2)));
                                     direction = null;
                                 }
