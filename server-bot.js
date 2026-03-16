@@ -311,14 +311,20 @@ app.post('/api/control', (req, res) => {
         if (distLimit) SNIPER_CONFIG.distLimit = Number(distLimit);
 
         saveState();
-        console.log(`▶️ BOT ENCENDIDO: SNIPER PRO | Stake: $${SNIPER_CONFIG.stake}`);
-        return res.json({ success: true, message: 'Bot Sniper Pro Activado', isRunning: true });
+        console.log(`\n=========================================`);
+        console.log(`▶️ BOT ACTIVADO: SILVER INSTITUTIONAL GIB`);
+        console.log(`💰 Stake: $${SNIPER_CONFIG.stake} | Multiplicador: ${SNIPER_CONFIG.multiplier}`);
+        console.log(`🎯 TP: $${SNIPER_CONFIG.takeProfit} | SL: $${SNIPER_CONFIG.stopLoss}`);
+        console.log(`=========================================\n`);
+        return res.json({ success: true, message: 'Bot Silver GIB Activado', isRunning: true });
     }
 
     if (action === 'STOP') {
         botState.isRunning = false;
         saveState();
-        console.log(`⏸️ BOT DETENIDO: El usuario pausó el algoritmo.`);
+        console.log(`\n=========================================`);
+        console.log(`⏸️ BOT DETENIDO: El algoritmo se ha pausado.`);
+        console.log(`=========================================\n`);
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
 
