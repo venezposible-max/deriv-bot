@@ -8,17 +8,17 @@ const fs = require('fs');
 // CONFIGURACIÓN DEL BOT - MULTI-ESTRATEGIA
 // ==========================================
 const APP_ID = 1089;
-let SYMBOL = 'stpRNG'; // Símbolo Step Index (Ultra Rentable)
+let SYMBOL = 'frxXAUUSD'; // Oro (XAUUSD) - Estrategia GIB W/M
 const STATE_FILE = path.join(__dirname, 'persistent-state.json');
 
 // --- CONFIGURACIÓN DE ESTRATEGIA UNIFICADA (SNIPER PRO - TÉCNICA MAESTRA) ---
 let SNIPER_CONFIG = {
-    stake: 20,
-    takeProfit: 3.00,  // 🎯 Meta Optimizada
-    stopLoss: 1.50,    // 🛡️ SL Ultra-Corto (Ratio 2:1)
-    multiplier: 750,
+    stake: 10,
+    takeProfit: 19.00, // Basado en ratio 2:1 del backtest
+    stopLoss: 9.50,
+    multiplier: 200,
     smaPeriod: 50,
-    smaLongPeriod: 200, // 🏛️ Filtro de Tendencia Mayor (MAESTRO)
+    smaLongPeriod: 200, // Filtro Mayor
     rsiPeriod: 14,
     rsiLow: 25,        // Ajustado (antes 20) para evitar agotamiento
     rsiHigh: 75,       // Ajustado (antes 80) para evitar agotamiento
@@ -46,7 +46,7 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     pnlSession: 0,
-    activeSymbol: 'stpRNG', // Símbolo activo (Step Index)
+    activeSymbol: 'frxXAUUSD', // Símbolo activo (Oro)
     currentContractId: null,
     currentMaxProfit: 0,
     lastSlAssigned: -12,
@@ -58,6 +58,8 @@ let botState = {
     customToken: null,
     connectionError: null,
     tradeHistory: [],
+    marketStatus: 'OPEN',
+    rsiValue: 50,
     dailyLossLimit: 5.0,
     startBalanceDay: 0,
     isLockedByDrawdown: false,
@@ -68,7 +70,8 @@ let botState = {
     tickIntervals: [],
     useHybrid: false,
     lastScanLogTime: 0,
-    isReversing: false
+    isReversing: false,
+    activeStrategyName: 'GOLD INSTITUTIONAL GIB'
 };
 
 // --- CARGAR ESTADO ---
@@ -81,14 +84,14 @@ if (fs.existsSync(STATE_FILE)) {
         }
         if (saved.useHybrid !== undefined) botState.useHybrid = saved.useHybrid;
 
-        // --- OPTIMIZACIÓN PARA STEP INDEX (Garantía de símbolos) ---
-        botState.activeSymbol = 'stpRNG';
-        SYMBOL = 'stpRNG';
+        // --- OPTIMIZACIÓN PARA ORO (Garantía de símbolos) ---
+        botState.activeSymbol = 'frxXAUUSD';
+        SYMBOL = 'frxXAUUSD';
 
         // Aseguramos multiplicador mínimo de 750 si es menor (por seguridad en Step Index)
         if (SNIPER_CONFIG.multiplier < 750) SNIPER_CONFIG.multiplier = 750;
 
-        console.log(`📦 ESTADO RECUPERADO: Step Index listo. Stop Loss Actual: $${SNIPER_CONFIG.stopLoss}`);
+        console.log(`📦 ESTADO RECUPERADO: ORO INSTITUTIONAL listo. Stop Loss Actual: $${SNIPER_CONFIG.stopLoss}`);
     } catch (e) {
         console.error('⚠️ Error cargando el estado persistente:', e);
     }
@@ -185,6 +188,7 @@ let isBuying = false;
 let cooldownTime = 0;
 let tickHistory = [];
 let candleHistory = []; // Velas M1
+let candleHistoryM5 = []; // Velas M5 para ORO Institutional
 let candleHistoryH1 = []; // Velas H1 para filtro MTF
 
 console.log('🚀 Iniciando Servidor Multi-Estrategia 24/7...');
@@ -284,6 +288,7 @@ app.post('/api/control', (req, res) => {
                 if (ws && botState.isConnectedToDeriv) {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para ORO GIB
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                 }
             }, 400);
@@ -407,6 +412,12 @@ function connectDeriv() {
             const isBenign = errMsg.includes('already subscribed') ||
                 errMsg.includes('unrecognised request');
 
+            if (errMsg.includes('market is presently closed')) {
+                botState.marketStatus = 'CLOSED';
+                botState.connectionError = null; // No lo tratamos como error de conexión
+                return; // Silencio, solo actualizamos estado
+            }
+
             if (!isBenign) {
                 console.error(`⚠️ Error de Deriv: ${msg.error.message}`);
             }
@@ -451,6 +462,7 @@ function connectDeriv() {
             if (!botState.startBalanceDay || botState.startBalanceDay === 0) {
                 botState.startBalanceDay = botState.balance;
             }
+            botState.marketStatus = 'OPEN'; // Reset al autorizar
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname || 'Trader'} | Saldo inicial: $${botState.balance}`);
 
             // --- CALENTAMIENTO INSTANTÁNEO (WARM START) ---
@@ -474,6 +486,7 @@ function connectDeriv() {
                     ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
                     // Siempre pedir historial de velas para filtros de precisión inmediatos
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 60, subscribe: 1 }));
+                    ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 300, subscribe: 1 })); // M5 para ORO GIB
                     ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 100, style: 'candles', granularity: 3600, subscribe: 1 }));
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
@@ -535,7 +548,8 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'tick') {
-            botState.connectionError = null; // Si llegan ticks, el mercado está vivo
+            botState.connectionError = null;
+            botState.marketStatus = 'OPEN'; // Auto-detección: si hay precio, el mercado está abierto
             const quote = parseFloat(msg.tick.quote);
 
             // --- CÁLCULO DE VELOCIDAD DE TICKS ---
@@ -660,6 +674,48 @@ function connectDeriv() {
                                 if (allDown && rsi < 25) { direction = 'MULTUP'; console.log(`⚔️ MODO ALPHA: Sobre-extensión detectada (RSI: ${rsi.toFixed(1)}). Disparando REVERSIÓN.`); }
                             }
                         }
+                    } else if (SYMBOL === 'frxXAUUSD') {
+                        // --- ESTRATEGIA EXCLUSIVA ORO: INSTITUTIONAL GIB (W/M PATTERN) ---
+                        if (candleHistoryM5 && candleHistoryM5.length >= 40) {
+                            let pivotsL = [], pivotsH = [];
+                            // Escaneo de Pivotes M5 (Últimas 40 velas)
+                            for (let j = candleHistoryM5.length - 2; j > candleHistoryM5.length - 35; j--) {
+                                const prev = candleHistoryM5[j - 1], cur = candleHistoryM5[j], next = candleHistoryM5[j + 1];
+                                if (!prev || !next) continue;
+                                if (cur.low < prev.low && cur.low < next.low) pivotsL.push({ price: cur.low, index: j });
+                                if (cur.high > prev.high && cur.high > next.high) pivotsH.push({ price: cur.high, index: j });
+                            }
+
+                            if (pivotsL.length >= 2 && pivotsH.length >= 1) {
+                                const l2 = pivotsL[0].price, l1 = pivotsL[1].price, hh = pivotsH[0].price;
+                                // PATRÓN W (Higher Low + Breakout)
+                                if (l2 > l1 && quote > hh && pivotsL[0].index > pivotsH[0].index && pivotsH[0].index > pivotsL[1].index) {
+                                    const distPct = Math.abs(quote - l2) / quote;
+                                    let slAmt = (SNIPER_CONFIG.stopLoss > 0) ? SNIPER_CONFIG.stopLoss : SNIPER_CONFIG.stake * SNIPER_CONFIG.multiplier * (distPct + 0.0001);
+                                    let tpAmt = (SNIPER_CONFIG.takeProfit > 0) ? SNIPER_CONFIG.takeProfit : slAmt * 2;
+                                    if (slAmt >= SNIPER_CONFIG.stake) slAmt = SNIPER_CONFIG.stake * 0.95;
+                                    direction = 'MULTUP';
+                                    console.log(`🥇 GOLD W-PATTERN: Higher Low detectado (${l2} > ${l1}). Disparando Breakout!`);
+                                    executeTrade(direction, parseFloat(tpAmt.toFixed(2)), parseFloat(slAmt.toFixed(2)));
+                                    direction = null; // Mark handled
+                                }
+                            }
+
+                            if (!direction && pivotsH.length >= 2 && pivotsL.length >= 1) {
+                                const h2 = pivotsH[0].price, h1 = pivotsH[1].price, ll = pivotsL[0].price;
+                                // PATRÓN M (Lower High + Breakout)
+                                if (h2 < h1 && quote < ll && pivotsH[0].index > pivotsL[0].index && pivotsL[0].index > pivotsH[1].index) {
+                                    const distPct = Math.abs(quote - h2) / quote;
+                                    let slAmt = (SNIPER_CONFIG.stopLoss > 0) ? SNIPER_CONFIG.stopLoss : SNIPER_CONFIG.stake * SNIPER_CONFIG.multiplier * (distPct + 0.0001);
+                                    let tpAmt = (SNIPER_CONFIG.takeProfit > 0) ? SNIPER_CONFIG.takeProfit : slAmt * 2;
+                                    if (slAmt >= SNIPER_CONFIG.stake) slAmt = SNIPER_CONFIG.stake * 0.95;
+                                    direction = 'MULTDOWN';
+                                    console.log(`🥇 GOLD M-PATTERN: Lower High detectado (${h2} < ${h1}). Disparando Breakout!`);
+                                    executeTrade(direction, parseFloat(tpAmt.toFixed(2)), parseFloat(slAmt.toFixed(2)));
+                                    direction = null;
+                                }
+                            }
+                        }
                     } else {
                         const trendVortex = calculateSMA(tickHistory, 2000);
                         const rsi7 = calculateRSI(tickHistory, 7);
@@ -730,6 +786,17 @@ function connectDeriv() {
                     candleHistoryH1.push(entry);
                 }
                 if (candleHistoryH1.length > 50) candleHistoryH1.shift();
+                return;
+            }
+
+            if (candle.granularity === 300) {
+                // MANEJO VELAS M5 (Oro GIB)
+                if (candleHistoryM5.length > 0 && candleHistoryM5[candleHistoryM5.length - 1].epoch === candle.epoch) {
+                    candleHistoryM5[candleHistoryM5.length - 1] = entry;
+                } else {
+                    candleHistoryM5.push(entry);
+                }
+                if (candleHistoryM5.length > 100) candleHistoryM5.shift();
                 return;
             }
 

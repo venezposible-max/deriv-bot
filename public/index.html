@@ -1,18 +1,527 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="es">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/png" href="/icon.png" />
-    <title>Deriv Bot Terminal</title>
-  <script type="module" crossorigin src="/assets/index-CkpHyvR2.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CarwPAhT.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GOLD INSTITUTIONAL SNIPER 🥇</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --gold: #D4AF37;
+      --gold-bright: #FFD700;
+      --dark-bg: #0a0a0c;
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --green: #00ff88;
+      --red: #ff4444;
+      --text: #ffffff;
+      --glass: rgba(255, 255, 255, 0.1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Roboto', sans-serif;
+    }
+
+    body {
+      background: var(--dark-bg);
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(212, 175, 55, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(212, 175, 55, 0.05) 0%, transparent 40%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 20px;
+      border-bottom: 1px solid var(--glass);
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      color: var(--gold-bright);
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      margin-bottom: 5px;
+      text-shadow: 0 0 15px rgba(212, 175, 55, 0.5);
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: #aaa;
+      letter-spacing: 2px;
+    }
+
+    /* Status Grid */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .status-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass);
+      padding: 20px;
+      border-radius: 15px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .status-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--gold);
+    }
+
+    .status-card h3 {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .status-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .status-value.gold {
+      color: var(--gold-bright);
+    }
+
+    .status-value.green {
+      color: var(--green);
+    }
+
+    .status-value.red {
+      color: var(--red);
+    }
+
+    /* Main Controls */
+    .main-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass);
+      border-radius: 20px;
+      padding: 30px;
+      margin-bottom: 25px;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 25px;
+      justify-content: center;
+    }
+
+    .input-group {
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .input-group input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--glass);
+      padding: 12px;
+      color: white;
+      border-radius: 8px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .input-group input:focus {
+      border-color: var(--gold);
+    }
+
+    .btn {
+      padding: 15px 30px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      text-transform: uppercase;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, var(--gold), #8a6d3b);
+      color: black;
+      box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+    }
+
+    .btn-start:hover {
+      transform: scale(1.02);
+      box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5);
+    }
+
+    .btn-stop {
+      background: rgba(255, 68, 68, 0.2);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+
+    .btn-stop:hover {
+      background: var(--red);
+      color: white;
+    }
+
+    .manual-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .btn-buy {
+      background: rgba(0, 255, 136, 0.1);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+
+    .btn-sell {
+      background: rgba(255, 68, 68, 0.1);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+
+    .btn-buy:hover:not(:disabled) {
+      background: var(--green);
+      color: black;
+    }
+
+    .btn-sell:hover:not(:disabled) {
+      background: var(--red);
+      color: white;
+    }
+
+    /* History */
+    .history-panel {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid var(--glass);
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 15px;
+      border-bottom: 1px solid var(--glass);
+      font-size: 0.9rem;
+    }
+
+    .history-item:last-child {
+      border: none;
+    }
+
+    .tag {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .tag.won {
+      background: rgba(0, 255, 136, 0.2);
+      color: var(--green);
+    }
+
+    .tag.lost {
+      background: rgba(255, 68, 68, 0.2);
+      color: var(--red);
+    }
+
+    /* Mobile specific */
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.8rem;
+      }
+
+      .status-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .locked {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #market-closed-warning {
+      display: none;
+      background: rgba(255, 68, 68, 0.2);
+      color: var(--red);
+      padding: 10px;
+      text-align: center;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      font-weight: 700;
+    }
+  </style>
 </head>
 
 <body>
-    <div id="root"></div>
+  <div class="container">
+    <header>
+      <h1>GOLD SNIPER GIB 🥇</h1>
+      <div class="subtitle">ESTRATEGIA INSTITUCIONAL W/M PATTERN</div>
+    </header>
+
+    <div id="market-closed-warning">⚠️ MERCADO CERRADO - REAPERTURA EL DOMINGO</div>
+
+    <div class="status-grid">
+      <div class="status-card">
+        <h3>Balance</h3>
+        <div id="balance" class="status-value gold">$0.00</div>
+      </div>
+      <div class="status-card">
+        <h3>PnL Sesión</h3>
+        <div id="session-pnl" class="status-value">$0.00</div>
+      </div>
+      <div class="status-card">
+        <h3>Trades (G/P)</h3>
+        <div id="trades-count" class="status-value">0 / 0</div>
+      </div>
+      <div class="status-card">
+        <h3>Estado</h3>
+        <div id="bot-status" class="status-value green">OFF</div>
+      </div>
+    </div>
+
+    <div class="main-panel">
+      <div class="controls-row">
+        <div class="input-group">
+          <label>Stake ($)</label>
+          <input type="number" id="stake" value="10" step="1">
+        </div>
+        <div class="input-group">
+          <label>Multip. (XAU)</label>
+          <input type="number" id="multiplier" value="200" disabled>
+        </div>
+        <div class="input-group">
+          <label>Stop Loss ($)</label>
+          <input type="number" id="stoploss" value="9.50" step="0.5">
+        </div>
+        <div class="input-group">
+          <label>Take Profit ($)</label>
+          <input type="number" id="takeprofit" value="19.00" step="0.5">
+        </div>
+      </div>
+
+      <button id="toggle-btn" class="btn btn-start">Iniciar Bot Oro</button>
+
+      <div class="manual-buttons">
+        <button onclick="manualTrade('MULTUP')" class="btn btn-buy" id="manual-up">Manual UP</button>
+        <button onclick="manualTrade('MULTDOWN')" class="btn btn-sell" id="manual-down">Manual DOWN</button>
+      </div>
+    </div>
+
+    <!-- Panel de Operación Activa -->
+    <div id="active-trade-card" class="history-panel"
+      style="display:none; border: 2px solid var(--gold); margin-bottom: 20px;">
+      <div class="history-header">
+        <h3 id="active-trade-type" style="color:var(--gold)">OPERACIÓN: COMPRA 🔼</h3>
+        <button id="close-btn" onclick="sellCurrent()"
+          style="background:var(--red); color:white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer; font-weight:700;">CERRAR
+          AHORA</button>
+      </div>
+      <div style="text-align:center; padding: 20px;">
+        <div id="active-trade-profit" style="font-size: 2.5rem; font-weight: 900;" class="green">$0.00</div>
+        <div style="color:#888; margin-top:5px; font-size:0.9rem;">Ganancia Flotante</div>
+      </div>
+    </div>
+
+    <div class="history-panel">
+      <div class="history-header">
+        <h3>Historial Reciente</h3>
+        <button onclick="clearHistory()"
+          style="background:none; border:none; color:var(--red); cursor:pointer; font-size:0.8rem;">Limpiar</button>
+      </div>
+      <div id="history-list">
+        <!-- Trades go here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const password = "colina123";
+    let isRunning = false;
+
+    async function updateStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const { data } = await res.json();
+
+        document.getElementById('balance').textContent = `$${parseFloat(data.balance).toFixed(2)}`;
+        const pnl = parseFloat(data.pnlSession);
+        const pnlEl = document.getElementById('session-pnl');
+        pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+        pnlEl.className = `status-value ${pnl >= 0 ? 'green' : 'red'}`;
+
+        document.getElementById('trades-count').textContent = `${data.winsSession} / ${data.lossesSession}`;
+
+        const statusEl = document.getElementById('bot-status');
+        isRunning = data.isRunning;
+        statusEl.textContent = isRunning ? 'RUNNING' : 'STOPPED';
+        statusEl.className = `status-value ${isRunning ? 'green' : 'red'}`;
+
+        const toggleBtn = document.getElementById('toggle-btn');
+        toggleBtn.textContent = isRunning ? 'Detener Bot Oro' : 'Iniciar Bot Oro';
+        toggleBtn.className = isRunning ? 'btn btn-stop' : 'btn btn-start';
+
+        // Locking
+        const inputs = ['stake', 'stoploss', 'takeprofit'];
+        const manualBtns = ['manual-up', 'manual-down'];
+        inputs.forEach(id => document.getElementById(id).disabled = isRunning);
+        manualBtns.forEach(id => document.getElementById(id).disabled = isRunning);
+
+        // Market closed check
+        const warning = document.getElementById('market-closed-warning');
+        warning.style.display = data.marketStatus === 'CLOSED' ? 'block' : 'none';
+
+        // Render Active Trade
+        const activeCard = document.getElementById('active-trade-card');
+        if (data.currentContractId) {
+          activeCard.style.display = 'block';
+          const profit = parseFloat(data.activeProfit || 0);
+          const profitEl = document.getElementById('active-trade-profit');
+          profitEl.textContent = `${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
+          profitEl.className = profit >= 0 ? 'green' : 'red';
+
+          const typeLabel = data.currentContractType === 'MULTUP' ? 'COMPRA 🔼' : 'VENTA 🔽';
+          document.getElementById('active-trade-type').textContent = `OPERACIÓN: ${typeLabel}`;
+          document.getElementById('active-trade-type').style.color = data.currentContractType === 'MULTUP' ? 'var(--green)' : 'var(--red)';
+        } else {
+          activeCard.style.display = 'none';
+        }
+
+        // Render History
+        renderHistory(data.tradeHistory);
+
+      } catch (err) {
+        console.error("Status fetch error", err);
+      }
+    }
+
+    function renderHistory(history) {
+      const list = document.getElementById('history-list');
+      list.innerHTML = '';
+      if (!history || history.length === 0) {
+        list.innerHTML = '<div class="history-item" style="color:#666; justify-content:center;">Sin operaciones en esta sesión</div>';
+        return;
+      }
+      history.forEach(h => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        const profit = parseFloat(h.profit);
+        item.innerHTML = `
+                    <span>${h.timestamp} - Gold ${h.type}</span>
+                    <span class="tag ${profit > 0 ? 'won' : 'lost'}">${profit > 0 ? 'WON' : 'LOST'} $${Math.abs(profit).toFixed(2)}</span>
+                `;
+        list.appendChild(item);
+      });
+    }
+
+    document.getElementById('toggle-btn').addEventListener('click', async () => {
+      const action = isRunning ? 'STOP' : 'START';
+      const stake = document.getElementById('stake').value;
+      const stopLoss = document.getElementById('stoploss').value;
+      const takeProfit = document.getElementById('takeprofit').value;
+
+      await fetch('/api/control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action,
+          password,
+          stake,
+          stopLoss,
+          takeProfit,
+          symbol: 'frxXAUUSD'
+        })
+      });
+      updateStatus();
+    });
+
+    async function manualTrade(action) {
+      await fetch('/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, password })
+      });
+      updateStatus();
+    }
+
+    async function clearHistory() {
+      if (confirm('¿Reiniciar estadísticas?')) {
+        await fetch('/api/clear-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        updateStatus();
+      }
+    }
+
+    async function sellCurrent() {
+      if (!confirm("¿Cerrar la operación actual?")) return;
+      await fetch('/api/sell-contract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          password
+        })
+      });
+      updateStatus();
+    }
+
+    setInterval(updateStatus, 1500);
+    updateStatus();
+  </script>
 </body>
 
 </html>
