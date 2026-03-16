@@ -295,7 +295,7 @@ app.post('/api/control', (req, res) => {
         }
 
         const marketName = symbol === 'stpRNG' ? 'Step Index' : (symbol === 'R_100' ? 'V100' : (symbol === 'frxXAUUSD' ? 'Oro' : 'Plata'));
-        return res.json({ success: true, message: `Mercado cambiado a ${marketName}` });
+        if (!action) return res.json({ success: true, message: `Mercado cambiado a ${marketName}` });
     }
 
     if (action === 'START') {
